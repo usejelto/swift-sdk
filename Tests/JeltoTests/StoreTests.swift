@@ -120,6 +120,44 @@ final class StoreTests: XCTestCase {
     }
 
 
+    // The directory mode is RE-ASSERTED, not merely set at creation:
+    // `createDirectory(…attributes:)` only applies `attributes` to a directory it actually
+    // creates, so a directory made world-readable by something else before the SDK ever ran must
+    // still end up 0700 the first time the SDK touches it.
+
+    func testDirectoryModeIsReassertedEvenWhenItAlreadyExists() throws {
+        let dir = freshDirectory()
+        defer { removeQuietly(dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o755])
+
+        let store = Store(directory: dir)
+        store.update { $0.installID = "install-mode" }
+
+        let dirMode = try FileManager.default.attributesOfItem(atPath: dir.path)[.posixPermissions] as? Int
+        XCTAssertEqual(dirMode, 0o700)
+
+        for name in try FileManager.default.contentsOfDirectory(atPath: dir.path) {
+            let fileMode = try FileManager.default.attributesOfItem(atPath: dir.appendingPathComponent(name).path)[.posixPermissions] as? Int
+            XCTAssertEqual(fileMode, 0o600, name)
+        }
+    }
+
+    // A `state.plist` far past its legitimate ceiling is treated as
+    // corrupt: an empty state, never a crash, never an unbounded read.
+
+    func testOversizedStateFileLoadsAsEmptyWithoutCrashing() throws {
+        let dir = freshDirectory()
+        defer { removeQuietly(dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let stateFile = dir.appendingPathComponent("state.plist")
+        let garbage = Data(repeating: 0x41, count: 300 * 1_024) // past the 256 KiB ceiling.
+        try garbage.write(to: stateFile)
+
+        let store = Store(directory: dir)
+        let loaded = store.load()
+        XCTAssertTrue(statesEqual(loaded, PersistedState()))
+    }
+
     func testExportEmptyState() {
         let export = StateExport(state: PersistedState(), queueBytes: 0, queueEvents: [])
         let text = String(decoding: export.jsonData(), as: UTF8.self)

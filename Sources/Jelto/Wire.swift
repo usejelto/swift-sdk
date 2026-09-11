@@ -6,7 +6,7 @@ import Foundation
 /// The numeric limits of spec/wire-v1.md §2/§3/§4, and the SDK's own `v`.
 enum Wire {
     static let maxBodyBytes = 65_536 // §2, and W1's "body <= 64 KB"
-    static let maxEvents = 100 // §2, and RFC-0001 §8.3 item 7
+    static let maxEvents = 100 // §2
     static let maxProps = 20 // §3, and §4's heartbeat cap since wire rev 0.16
     static let maxPropString = 200 // §3
     static let maxReasonChars = 64 // §4
@@ -99,6 +99,30 @@ enum Grammar {
     /// `^[a-z0-9-]{1,32}$`
     static func isAppSlug(_ s: String) -> Bool {
         matches(s, min: 1, max: 32) { isLowerAlpha($0) || isDigit($0) || $0 == 0x2D }
+    }
+
+    /// `^prd_[a-z0-9]{10}$` (spec/wire-v1.md §2's `p`). A hand-written scan, not a `matches`
+    /// closure, because the fixed `prd_` prefix is not expressible as a per-scalar predicate.
+    static func isProductKey(_ s: String) -> Bool {
+        let scalars = Array(s.unicodeScalars)
+        guard scalars.count == 14,
+              scalars[0].value == 0x70, scalars[1].value == 0x72,
+              scalars[2].value == 0x64, scalars[3].value == 0x5F else { return false }
+        for i in 4..<14 {
+            let v = scalars[i].value
+            guard isLowerAlpha(v) || isDigit(v) else { return false }
+        }
+        return true
+    }
+
+    /// wire §5.2's `os` enum: macos|windows|linux.
+    static func isPlatformOS(_ s: String) -> Bool {
+        s == "macos" || s == "windows" || s == "linux"
+    }
+
+    /// wire §5.2's `arch` enum: arm64|x64|x86.
+    static func isPlatformArch(_ s: String) -> Bool {
+        s == "arm64" || s == "x64" || s == "x86"
     }
 
     /// RFC 8259 §6: `-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?`. `WireValue.number` carries a
@@ -313,7 +337,7 @@ enum WireGate {
         return true
     }
 
-    /// §8.1's sugar and BRIEF's C20 trap. Returns `("onboarding:" + step, props)` and does
+    /// §8.1's sugar, and the trap C20 exercises. Returns `("onboarding:" + step, props)` and does
     /// nothing else: no extra key, no `i`, no timestamp, no marker, no ordering difference — the
     /// runner's congruence check compares an onboarding event against a `track` of the same name
     /// and props field by field.
@@ -359,7 +383,7 @@ enum WireGate {
         return result
     }
 
-    /// The cap check lives here so §3's number lives in one file; the merge itself is plan 5's.
+    /// The cap check lives here so §3's number lives in one file; the merge itself lives elsewhere.
     static func withinPropCap(_ merged: [String: String], log: DebugLog) -> Bool {
         guard merged.count > Wire.maxProps else { return true }
         log.log("drop setprops: \(merged.count) install properties, spec/wire-v1.md §3 caps them at \(Wire.maxProps)")
@@ -376,6 +400,17 @@ enum WireGate {
         if Grammar.isClientVersion(override) { return override }
         log.log("client version \(DebugLog.display(override)) does not match spec/wire-v1.md §3's ^[a-z]+/[0-9A-Za-z.+-]{1,24}$; `v` is omitted")
         return nil
+    }
+
+    /// spec/wire-v1.md §2's `p`: `^prd_[a-z0-9]{10}$`. `init` is refused outright — not
+    /// queued, not retried — when the caller's key does not match, with one debug line naming
+    /// the rule.
+    static func productKey(_ key: String, log: DebugLog) -> String? {
+        guard Grammar.isProductKey(key) else {
+            log.log("drop init: product key must match ^prd_[a-z0-9]{10}$")
+            return nil
+        }
+        return key
     }
 
     /// `nil` for `nil` and for `""` (§5.2: an empty `a` is an absent `a`), the value when it
@@ -474,7 +509,7 @@ enum Envelope {
 
         // `t` <- the ASCII bytes of `e.t.description`, written raw as a JSON number. Never
         // through `Double`, `Int64` or `NumberFormatter`: JSON has no integer type, and the
-        // builder emits the digits it was given (C15b; RFC-0001 §8.5).
+        // builder emits the digits it was given (C15b).
         data.append(contentsOf: Array(",\"t\":".utf8))
         data.append(contentsOf: Array(e.t.description.utf8))
 

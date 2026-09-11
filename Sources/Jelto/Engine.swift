@@ -14,10 +14,17 @@ final class Engine: @unchecked Sendable {
     // Only that queue accesses transportInstance.
     private let envEndpoint: String?
 
-    // Write the endpoint under lock before dispatching bootstrap; dispatch orders its queue-only reads.
-    private var transportEndpoint: URL
+    // Write the endpoint under lock before dispatching bootstrap; `transport()` re-reads it
+    // under `lock` on every call rather than trusting a stale unsynchronized read. `nil` means:
+    // no absolute http(s) URL with no userinfo could be resolved at
+    // any precedence level touched so far — the whole process stays inactive (spec/wire-v1.md §1).
+    private var transportEndpoint: URL?
     private let transportMockMode: String?
     private var transportInstance: Transport?
+    // Paired with `transportInstance`: the endpoint that instance was actually built with, so a
+    // later `init` with a new endpoint rebuilds rather than silently keeps sending to the old
+    // one. Only `dispatchQueue` touches this, same as `transportInstance`.
+    private var cachedTransportEndpoint: URL?
     private let clientVersion: String?
     private let appVersionOverride: String?
     private let beforeMutation: (@Sendable (Mutation) -> Void)?
@@ -170,6 +177,17 @@ final class Engine: @unchecked Sendable {
         if let endpoint, !endpoint.isEmpty {
             self.transportEndpoint = Engine.resolveEndpoint(argument: endpoint, envValue: envEndpoint, log: log)
         }
+        // A non-empty invalid endpoint at any precedence level leaves the client inactive for
+        // the whole process (spec/wire-v1.md §1) — never a fall-through.
+        guard self.transportEndpoint != nil else {
+            lock.unlock()
+            return
+        }
+        // spec/wire-v1.md §2's `p` grammar: `init` is refused outright.
+        guard WireGate.productKey(key, log: log) != nil else {
+            lock.unlock()
+            return
+        }
         if started && !disabled {
             lock.unlock()
             return
@@ -203,31 +221,66 @@ final class Engine: @unchecked Sendable {
         }
     }
 
-    /// Resolve explicit endpoint, then environment, then the default. Invalid URLs
-    /// fall through with a debug line; resolution never throws.
-    static func resolveEndpoint(argument: String?, envValue: String?, log: DebugLog) -> URL {
+    /// Resolve explicit endpoint, then environment, then the default (spec/wire-v1.md §1).
+    /// An empty value is absent at every level, so the next level applies. A NON-EMPTY value
+    /// that is not an absolute http(s) URL with no userinfo makes resolution `nil` at once —
+    /// there is no fall-through past a value that was actually given (the original defect was
+    /// accepting something unusable and then silently never delivering; the fix is not to
+    /// invent a *different* silent failure one level down). Resolution never
+    /// throws.
+    static func resolveEndpoint(argument: String?, envValue: String?, log: DebugLog) -> URL? {
         if let argument, !argument.isEmpty {
-            if let url = URL(string: argument), url.scheme != nil { return url }
-            log.log("endpoint \(argument) passed to initialize is not an absolute URL; falling back to JELTO_ENDPOINT or spec/wire-v1.md §1's default")
+            if let url = Engine.validatedEndpointURL(argument) { return url }
+            log.log("endpoint \(DebugLog.display(argument)) passed to initialize is not an absolute http(s) URL with no userinfo (spec/wire-v1.md §1); the client is inactive")
+            return nil
         }
         if let envValue, !envValue.isEmpty {
-            if let url = URL(string: envValue), url.scheme != nil { return url }
-            log.log("JELTO_ENDPOINT \(envValue) is not an absolute URL; falling back to spec/wire-v1.md §1's default")
+            if let url = Engine.validatedEndpointURL(envValue) { return url }
+            log.log("JELTO_ENDPOINT \(DebugLog.display(envValue)) is not an absolute http(s) URL with no userinfo (spec/wire-v1.md §1); the client is inactive")
+            return nil
         }
         if let url = URL(string: defaultEndpoint) { return url }
         // Unreachable: `defaultEndpoint` is a literal this test suite parses. No force unwrap.
-        log.log("spec/wire-v1.md §1's default endpoint \(defaultEndpoint) did not parse")
-        return URL(fileURLWithPath: "/dev/null")
+        log.log("spec/wire-v1.md §1's default endpoint \(defaultEndpoint) did not parse; the client is inactive")
+        return nil
+    }
+
+    /// spec/wire-v1.md §1: absolute, scheme `http` or `https` (case-insensitive), a non-empty
+    /// host, and no userinfo — `https://u:p@e.example/v1/e` is exactly as unsendable as
+    /// `file:///dev/null` or a bare relative path, and none of the three may become the URL a
+    /// client posts to.
+    private static func validatedEndpointURL(_ s: String) -> URL? {
+        guard let url = URL(string: s),
+              let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              let host = url.host, !host.isEmpty,
+              url.user == nil, url.password == nil else { return nil }
+        return url
     }
 
     static let defaultEndpoint = "https://in.jelto.io/v1/e"
 
-    /// Reuse the process-lifetime URLSession across disable/re-init. Called only on dispatchQueue.
+    /// Reuse the process-lifetime URLSession across disable/re-init, but rebuild it when the
+    /// endpoint differs from the one it was actually built with — reads
+    /// `transportEndpoint` fresh under `lock` on every call rather than the old unsynchronized
+    /// read. Called only on `dispatchQueue`.
     private func transport() -> Transport {
-        if let existing = transportInstance { return existing }
-        let built = Transport(endpoint: transportEndpoint, mockMode: transportMockMode)
+        lock.lock()
+        // `initialize` already refused to start when this is `nil`; the fallback below is
+        // defensive only and never reachable from a bootstrapped run.
+        let endpoint = transportEndpoint ?? URL(fileURLWithPath: "/dev/null")
+        lock.unlock()
+
+        if let existing = transportInstance, cachedTransportEndpoint == endpoint { return existing }
+        let built = Transport(endpoint: endpoint, mockMode: transportMockMode)
         transportInstance = built
+        cachedTransportEndpoint = endpoint
         return built
+    }
+
+    /// Test-only seam: the endpoint the cached `Transport` was actually
+    /// built with, read on `dispatchQueue` so it cannot race `transport()`'s write.
+    func currentTransportEndpoint() -> URL? {
+        dispatchQueue.sync { cachedTransportEndpoint }
     }
 
     private func bootstrap(gatedSlug: String?) {
@@ -256,9 +309,15 @@ final class Engine: @unchecked Sendable {
             }
         }
 
+        // Re-gate install properties restored from disk through the same grammar `setProps`
+        // enforces on the way in: a tampered or pre-upgrade `state.plist`
+        // must not resurrect a key/value pair the wire schema would refuse today.
+        let restoredProps = WireGate.installProps(stateAfterInstall.installProps, log: log)
+        let gatedProps = WireGate.withinPropCap(restoredProps, log: log) ? restoredProps : [:]
+
         lock.lock()
         installIDValue = stateAfterInstall.installID
-        props = stateAfterInstall.installProps
+        props = gatedProps
         initFlushAt = now.adding(2_000)
         lock.unlock()
 
@@ -449,7 +508,7 @@ final class Engine: @unchecked Sendable {
         if !state.installClaimed, let firstTry = state.installFirstTry,
            !(now < firstTry.adding(2_592_000_000)) {
             store.update { $0.installClaimed = true }
-            log.log("install claimed after 30 days of attempts without a 202 (RFC-0001 §8.2 item 4)")
+            log.log("install claimed after 30 days of attempts without a 202 (spec/sdk-conformance.md C4b)")
             return (nil, true)
         }
 
@@ -715,13 +774,19 @@ final class Engine: @unchecked Sendable {
             return
         }
         for rejection in parsed.rejected {
-            let fieldSuffix = rejection.field.map { " (\($0))" } ?? ""
-            log.log("event \(rejection.index) rejected: \(rejection.reason)\(fieldSuffix) (spec/wire-v1.md §6)")
+            let fieldSuffix = rejection.field.map { " (\(DebugLog.display($0)))" } ?? ""
+            log.log("event \(rejection.index) rejected: \(DebugLog.display(rejection.reason))\(fieldSuffix) (spec/wire-v1.md §6)")
         }
         guard let stop = parsed.stop else { return }
 
-        if stop.scope == "web" {
-            log.log("ignoring a stop scoped to web (spec/wire-v1.md §8; this client is s=app)")
+        // Positive match on the one scope this client answers to, not a negative match on the
+        // one scope it happens to know about today: wire §10 only ever
+        // appends scopes, and a future one must default to "ignore", the same as "web" does.
+        // `scope` itself is wire §8's closed `app`|`web` enum, not free-form server text — unlike
+        // `rejection.reason`/`error`/the `Retry-After` header, it needs no `DebugLog.display`
+        // quoting, and C16b's conformance scenario pins the exact unquoted wording.
+        guard stop.scope == "app" else {
+            log.log("ignoring a stop scoped to \(stop.scope) (spec/wire-v1.md §8; this client is s=app)")
             return
         }
 
@@ -739,8 +804,8 @@ final class Engine: @unchecked Sendable {
 
     private func finalRefusal(_ outcome: Outcome) {
         let error = ServerResponse.parse(outcome.body)?.error
-        let suffix = error.map { " \($0)" } ?? ""
-        log.log("batch dropped: status=\(outcome.status)\(suffix) -- final, not retried (RFC-0001 §8.3 items 8-9, spec/wire-v1.md §2a)")
+        let suffix = error.map { " \(DebugLog.display($0))" } ?? ""
+        log.log("batch dropped: status=\(outcome.status)\(suffix) -- final, not retried (spec/wire-v1.md §2a)")
     }
 
 
@@ -814,35 +879,46 @@ final class Engine: @unchecked Sendable {
         return installIDValue
     }
 
+    /// The mutation half of `reset()`, run on `dispatchQueue`. A separate function so every
+    /// early-return still lets its caller reach `done.signal()`.
+    private func performReset(generation: (lifecycle: UInt64, identity: UInt64)) {
+        let now = clock.now()
+        lock.lock()
+        defer { lock.unlock() }
+        guard !disabled, !quit, generation == (lifecycleGeneration, identityGeneration) else { return }
+        guard eventQueue.discardTransitions() else {
+            log.log("reset deferred: app update queue could not be persisted")
+            return
+        }
+        let newID = Identifiers.uuidV4()
+        let delay = Int64.random(in: 0..<21_600_000)
+        guard store.commit({ state in
+            state.installID = newID
+            state.installClaimed = false
+            state.installDueAt = now.adding(delay)
+            state.installFirstTry = nil
+            state.lastHeartbeatDay = nil
+            state.lastAppVersion = Platform.observedAppVersion(appVersionOverride)
+            state.pendingUpdate = nil
+        }) else { return }
+        versionObserved = true
+        installEnqueuedThisRun = eventQueue.contains(name: "install")
+        identityGeneration += 1
+        installIDValue = newID
+    }
+
     /// Serialize reset behind an in-flight send so its response cannot restore old state.
+    /// Bounded, like `terminate()`'s own queue wait: a send stuck past its
+    /// own timeout must not wedge this call forever.
     func reset() {
         guard let generation = admissionGeneration() else { return }
         beforeMutation?(.reset)
-        dispatchQueue.sync {
-            let now = clock.now()
-            lock.lock()
-            defer { lock.unlock() }
-            guard !disabled, !quit, generation == (lifecycleGeneration, identityGeneration) else { return }
-            guard eventQueue.discardTransitions() else {
-                log.log("reset deferred: app update queue could not be persisted")
-                return
-            }
-            let newID = Identifiers.uuidV4()
-            let delay = Int64.random(in: 0..<21_600_000)
-            guard store.commit({ state in
-                state.installID = newID
-                state.installClaimed = false
-                state.installDueAt = now.adding(delay)
-                state.installFirstTry = nil
-                state.lastHeartbeatDay = nil
-                state.lastAppVersion = Platform.observedAppVersion(appVersionOverride)
-                state.pendingUpdate = nil
-            }) else { return }
-            versionObserved = true
-            installEnqueuedThisRun = eventQueue.contains(name: "install")
-            identityGeneration += 1
-            installIDValue = newID
+        let done = DispatchSemaphore(value: 0)
+        dispatchQueue.async { [self] in
+            performReset(generation: generation)
+            done.signal()
         }
+        _ = done.wait(timeout: .now() + 2)
         notify()
     }
 
@@ -874,7 +950,8 @@ final class Engine: @unchecked Sendable {
             wiped.signal()
         }
         lock.unlock()
-        wiped.wait()
+        // Bounded: a wedged wipe must not hang the caller forever.
+        _ = wiped.wait(timeout: .now() + 2)
         notify()
     }
 
@@ -893,7 +970,7 @@ final class Engine: @unchecked Sendable {
         let flushDeadline = Date().addingTimeInterval(0.6)
         while eventQueue.count > 0 {
             if Date() >= flushDeadline {
-                log.log("termination flush gave up with \(eventQueue.count) events queued (best effort, RFC-0001 §8.3 item 7)")
+                log.log("termination flush gave up with \(eventQueue.count) events queued (best effort; the flush is bounded)")
                 break
             }
             Thread.sleep(forTimeInterval: 0.005)
@@ -969,7 +1046,7 @@ final class Engine: @unchecked Sendable {
         return stoppedNow
     }
 
-    // `dumpstate` (BRIEF Appendix C: waits on the init-in-flight latch; creates nothing).
+    // `dumpstate` waits on the init-in-flight latch; creates nothing.
 
     func exportState() -> Data {
         lock.lock()

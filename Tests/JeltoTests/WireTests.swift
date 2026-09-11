@@ -182,6 +182,40 @@ final class WireTests: XCTestCase {
         XCTAssertTrue(collector2.isEmpty)
     }
 
+    // spec/wire-v1.md §2's `p`: `^prd_[a-z0-9]{10}$`.
+
+    func testProductKeyGrammarAcceptReject() {
+        for accept in ["prd_8f3kq2m9x1", "prd_conform001", "prd_0000000000"] {
+            XCTAssertTrue(Grammar.isProductKey(accept), accept)
+        }
+        for reject in [
+            "", "prd_", "prd_shortk", "prd_8f3kq2m9x1extra", "PRD_8f3kq2m9x1",
+            "prd_8F3kq2m9x1", "xyz_8f3kq2m9x1", "prd_8f3kq2m9x1\n", " prd_8f3kq2m9x1",
+        ] {
+            XCTAssertFalse(Grammar.isProductKey(reject), reject)
+        }
+    }
+
+    func testWireGateProductKeyGate() {
+        let (log1, collector1) = debugLog()
+        XCTAssertNil(WireGate.productKey("prd_bad", log: log1))
+        XCTAssertTrue(collector1.text.contains("^prd_[a-z0-9]{10}$"))
+
+        let (log2, collector2) = debugLog()
+        XCTAssertEqual(WireGate.productKey("prd_conform001", log: log2), "prd_conform001")
+        XCTAssertTrue(collector2.isEmpty)
+    }
+
+    // wire §5.2's `os`/`arch` enums, re-used by `EventQueue`'s replay gate.
+
+    func testPlatformEnumGrammars() {
+        for accept in ["macos", "windows", "linux"] { XCTAssertTrue(Grammar.isPlatformOS(accept)) }
+        for reject in ["ios", "macOS", ""] { XCTAssertFalse(Grammar.isPlatformOS(reject)) }
+
+        for accept in ["arm64", "x64", "x86"] { XCTAssertTrue(Grammar.isPlatformArch(accept)) }
+        for reject in ["arm", "x86_64", ""] { XCTAssertFalse(Grammar.isPlatformArch(reject)) }
+    }
+
     // W3 -- validateTrackProps.
 
     func testW3ValidateTrackProps() {
@@ -328,6 +362,20 @@ final class WireTests: XCTestCase {
         XCTAssertFalse(result.contains("\n"))
         XCTAssertTrue(result.hasPrefix("\"a?b?"))
         XCTAssertTrue(result.hasSuffix("…\""))
+    }
+
+    /// Every server-supplied string an engine log line quotes
+    /// (a rejection reason, a `stop.scope`, a `Retry-After` header, a `202` error code) goes
+    /// through `DebugLog.display` first, specifically so an embedded `\n` cannot forge a second
+    /// `"jelto: "`-prefixed line inside what should be one stderr line.
+    func testDisplayPreventsLogInjectionFromServerSuppliedText() {
+        let (log, collector) = debugLog()
+        let forged = "\njelto: FORGED"
+        log.log("batch dropped: status=400 \(DebugLog.display(forged)) -- final, not retried")
+
+        let newlineCount = collector.data.filter { $0 == 0x0A }.count
+        XCTAssertEqual(newlineCount, 1, collector.text) // only `log`'s own trailing terminator.
+        XCTAssertFalse(collector.text.contains("\njelto: FORGED"))
     }
 
     // C15b -- t is the literal, raw.

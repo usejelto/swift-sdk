@@ -80,6 +80,45 @@ final class ResponseTests: XCTestCase {
         XCTAssertEqual(r?.stop?.until.description, "1788188001000")
     }
 
+    // A POSITIVE match on the one scope this client answers to,
+    // exercised end to end through `Engine.applyAccepted`: a `stop` scoped to anything else,
+    // present or future, must leave no `stop_until` in the exported state.
+
+    func testStopScopedToWebEmbeddedLeavesNoStopUntilInStateExport() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        setenv("JELTO_STATE_DIR", directory.path, 1)
+        setenv("JELTO_NOW", "0", 1)
+        setenv("JELTO_APP_VERSION", "1.0.0", 1)
+        defer {
+            unsetenv("JELTO_STATE_DIR")
+            unsetenv("JELTO_NOW")
+            unsetenv("JELTO_APP_VERSION")
+        }
+        XCTAssertTrue(Store(directory: directory).commit { s in
+            s.installID = Identifiers.uuidV4()
+            s.lastAppVersion = "1.0.0"
+            s.lastHeartbeatDay = "0"
+            s.installClaimed = true
+            s.installDueAt = Instant(-10_000)
+        })
+
+        let body = Data(#"{"stop":{"until":1,"scope":"web-embedded"}}"#.utf8)
+        let engine = Engine(post: { _ in
+            Outcome(status: 202, body: body, retryAfter: nil, isNetworkError: false, isRetryable: false)
+        })
+        engine.initialize(key: "prd_conform001", app: nil)
+        _ = engine.exportState()
+        engine.track(name: "x", props: nil)
+        engine.clock.pin(to: Instant(5_000))
+        XCTAssertTrue(engine.awaitBarrier(engine.openBarrier(), timeoutMS: 2_000))
+
+        let export = engine.exportState()
+        let text = String(decoding: export, as: UTF8.self)
+        XCTAssertFalse(text.contains("stop_until"), text)
+        engine.disable()
+    }
+
     /// Not JSON, all -> `nil`. The truncated object documents the consequence of `Transport`'s
     /// 64 KiB cap on a `huge` body — C10's `garbage` and `huge` arms in one place.
     func testNotJSONAllNil() {

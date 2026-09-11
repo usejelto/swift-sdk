@@ -240,6 +240,34 @@ final class LifecycleRegressionTests: XCTestCase {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path), [])
     }
 
+    // `disable()`'s internal wait is BOUNDED: a send wedged inside a
+    // `post` that can block up to 10 s must not make `disable()` wait that long too.
+
+    func testDisableReturnsBoundedWhileASendIsWedged() {
+        let directory = seed(claimed: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let entered = DispatchSemaphore(value: 0)
+        let resume = DispatchSemaphore(value: 0)
+        let engine = Engine(post: { _ in
+            entered.signal()
+            _ = resume.wait(timeout: .now() + 10) // a post that CAN block up to 10 s.
+            return Outcome(status: 202, body: Data("{}".utf8), retryAfter: nil, isNetworkError: false, isRetryable: false)
+        })
+        engine.initialize(key: "prd_conform001", app: nil)
+        _ = engine.exportState()
+        engine.track(name: "x", props: nil)
+        Thread.sleep(forTimeInterval: 0.2)
+
+        engine.clock.pin(to: Instant(5_000)) // past track's 5 s debounce.
+        _ = engine.openBarrier() // wakes the pump, which reaches the wedged `post`.
+        XCTAssertEqual(entered.wait(timeout: .now() + 2), .success, "expected the pump to reach the wedged post")
+
+        let start = Date()
+        engine.disable()
+        XCTAssertLessThan(Date().timeIntervalSince(start), 3.0)
+        resume.signal() // release the blocked post so the background work does not linger.
+    }
+
     func testClaimedPastDeadlineDoesNotContinuouslyScheduleTimers() throws {
         let directory = seed(claimed: true, pinned: false)
         defer { try? FileManager.default.removeItem(at: directory) }

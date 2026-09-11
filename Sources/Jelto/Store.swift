@@ -3,6 +3,23 @@
 
 import Foundation
 
+/// Shared by `Store` and `EventQueue` (spec/sdk-conformance.md §5): `FileManager`'s
+/// `createDirectory(at:withIntermediateDirectories:attributes:)` only ever applies `attributes`
+/// to a directory it actually creates — a directory that already exists (world-writable because
+/// an older SDK build made it, or because anything else did) keeps whatever mode it already had.
+/// The spec requires the mode RE-ASSERTED, not just set at creation, so this always follows up
+/// with an explicit, unconditional `setAttributes` regardless of which branch `createDirectory`
+/// took. Every failure is swallowed — the SDK never throws into the host app: an unwritable
+/// directory costs state, not a crash.
+enum StateDirectory {
+    static func ensureMode0700(_ directory: URL) {
+        try? FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700]
+        )
+        try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+    }
+}
+
 /// A write-ahead intent is committed atomically with the new baseline. Its timestamp is
 /// a decimal string for arbitrary-precision conformance clocks and plist compatibility.
 struct AppUpdateIntent: Sendable, Codable {
@@ -143,7 +160,7 @@ private struct StoredState: Codable {
     }
 }
 
-/// All state behind one `NSLock`. RFC-0001 §8.3 item 10: the SDK never throws into the host —
+/// All state behind one `NSLock`. The SDK never throws into the host —
 /// every failure here (missing file, corrupt plist, a full disk) is swallowed; a corrupt state
 /// costs an install id, not a crash. No `throws`, no `try!`, no force unwrap in this file.
 final class Store: @unchecked Sendable {
@@ -151,6 +168,13 @@ final class Store: @unchecked Sendable {
     private let directory: URL
     private let stateFileURL: URL
     private var state = PersistedState()
+
+    /// `state.plist` is a handful of scalar fields; nothing legitimate approaches this. A file
+    /// above it is corrupt or hostile (someone else's data landed in this directory, or an
+    /// attacker is trying to make `load()` allocate an unbounded buffer), and is treated exactly
+    /// like a missing or undecodable one — an empty `PersistedState()`, never a crash or an
+    /// unbounded read.
+    private static let maxStateFileBytes = 256 * 1_024 // 256 KiB
 
     /// Records the directory and the derived `state.plist` URL. Touches the filesystem not at
     /// all (C5).
@@ -166,7 +190,10 @@ final class Store: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
 
-        guard let data = try? Data(contentsOf: stateFileURL),
+        let attributes = try? FileManager.default.attributesOfItem(atPath: stateFileURL.path)
+        let size = (attributes?[.size] as? Int) ?? 0
+        guard size <= Store.maxStateFileBytes,
+              let data = try? Data(contentsOf: stateFileURL),
               let stored = try? PropertyListDecoder().decode(StoredState.self, from: data) else {
             state = PersistedState()
             return state
@@ -191,11 +218,7 @@ final class Store: @unchecked Sendable {
 
         mutate(&state)
 
-        try? FileManager.default.createDirectory(
-            at: directory,
-            withIntermediateDirectories: true,
-            attributes: [.posixPermissions: 0o700]
-        )
+        StateDirectory.ensureMode0700(directory)
 
         let stored = StoredState(state)
         let encoder = PropertyListEncoder()
@@ -219,8 +242,7 @@ final class Store: @unchecked Sendable {
         var next = state
         mutate(&next)
         do {
-            try FileManager.default.createDirectory(at: directory,
-                withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            StateDirectory.ensureMode0700(directory)
             let encoder = PropertyListEncoder()
             encoder.outputFormat = .binary
             try encoder.encode(StoredState(next)).write(to: stateFileURL, options: .atomic)
@@ -232,7 +254,7 @@ final class Store: @unchecked Sendable {
         }
     }
 
-    /// RFC-0001 §8.7 item 18. C18's `state_dir_empty` check is a real `os.ReadDir` of the
+    /// C18's `state_dir_empty` check is a real `os.ReadDir` of the
     /// directory, so resetting the in-memory fields and removing the two known file names is not
     /// enough: every remaining entry in the directory is removed too (the queue file, a stray
     /// compaction temp file, anything else the SDK put there). The directory itself is left in
@@ -240,7 +262,7 @@ final class Store: @unchecked Sendable {
     /// `checkStateDirEmpty`. Only entries of the SDK's own state directory are ever removed, and
     /// this never recurses above it.
     ///
-    /// Ordering contract with the queue, for plan 5: `EventQueue` holds an open append file
+    /// Ordering contract with the queue: `EventQueue` holds an open append file
     /// handle. The engine MUST call `queue.delete()` (which closes that handle) BEFORE
     /// `store.wipe()` — `wipe()` does not and cannot close it.
     func wipe() {

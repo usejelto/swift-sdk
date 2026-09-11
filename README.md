@@ -59,3 +59,12 @@ Jelto-owned software and associated documentation use the [MIT license](LICENSE)
 Third-party materials retain their own terms, including the Contributor Covenant
 attribution. Jelto names, logos, mascots and original brand artwork are excluded
 from the software license; no trademark rights are granted.
+
+## Specification references
+
+Source comments cite `spec/wire-v1.md` (the wire contract: envelope, fields, statuses,
+retry rules) and `spec/sdk-conformance.md` (the behavioural contract, whose `C…` and `W…`
+identifiers name conformance scenarios). Neither file ships in this repository: both live in
+the public contracts repository at <https://github.com/usejelto/contracts/tree/main/spec>.
+A comment that states a rule in words and then cites a section is pointing at the normative
+text for that rule.

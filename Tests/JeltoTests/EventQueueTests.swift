@@ -397,4 +397,111 @@ final class EventQueueTests: XCTestCase {
         let emptyText = String(decoding: emptyExport.jsonData(), as: UTF8.self)
         XCTAssertTrue(emptyText.contains("\"queue\":{\"bytes\":0,\"events\":[]}"), emptyText)
     }
+
+    // A `queue.jsonl` on disk is not trusted input, and a forged
+    // `.number` literal must cost only its own line, never be replayed straight into a future
+    // request body.
+
+    func testForgedNumberLiteralInReplayDropsThatLineButKeepsTheHonestOne() throws {
+        let fileURL = freshFileURL()
+        defer { removeQuietly(fileURL) }
+
+        let queue = EventQueue(fileURL: fileURL)
+        let honest = event("honest_event", ms: 1_000)
+        _ = queue.append(honest)
+
+        // A hand-crafted line whose `.number` literal is not RFC 8259 digits (Wire.swift's
+        // `appendJSONValue` writes it raw) — if replay trusted it, a future envelope would carry
+        // `"amount":1,"iid":"forged"` straight into the wire, splicing an extra key into the body.
+        let forgedLine = #"{"hb":false,"id":"forged-id","n":"forged_event","p":{"amount":{"n":"1,\"iid\":\"forged\""}},"t":"2000"}"#
+        let handle = try FileHandle(forWritingTo: fileURL)
+        handle.seekToEndOfFile()
+        handle.write(Data((forgedLine + "\n").utf8))
+        try handle.close()
+
+        let restored = EventQueue(fileURL: fileURL)
+        restored.load()
+
+        XCTAssertEqual(restored.count, 1)
+        let ids = restored.exportedEvents().map(\.id)
+        XCTAssertEqual(ids, [honest.id])
+        XCTAssertFalse(ids.contains("forged-id"))
+
+        let rendered = restored.head(10).map {
+            Envelope.event(
+                $0, platform: Platform(appVersion: "1.0.0", os: "macos", osVersion: "1", arch: "arm64", slug: nil),
+                clientVersion: nil, installID: "install", installProps: [:]
+            )
+        }
+        let (body, used) = Envelope.envelope(productKey: "prd_conform001", events: rendered)
+        XCTAssertEqual(used, 1)
+        XCTAssertNoThrow(try JSONSerialization.jsonObject(with: body))
+        XCTAssertFalse(String(decoding: body, as: UTF8.self).contains("forged"))
+    }
+
+    /// The same replay gate applied to the event NAME: a tampered `n` outside wire §3's grammar
+    /// must cost only that line.
+    func testForgedEventNameInReplayDropsThatLine() throws {
+        let fileURL = freshFileURL()
+        defer { removeQuietly(fileURL) }
+
+        let queue = EventQueue(fileURL: fileURL)
+        let honest = event("honest_event", ms: 1_000)
+        _ = queue.append(honest)
+
+        let forgedLine = #"{"hb":false,"id":"forged-name","n":"Not A Valid Name!","p":null,"t":"2000"}"#
+        let handle = try FileHandle(forWritingTo: fileURL)
+        handle.seekToEndOfFile()
+        handle.write(Data((forgedLine + "\n").utf8))
+        try handle.close()
+
+        let restored = EventQueue(fileURL: fileURL)
+        restored.load()
+
+        XCTAssertEqual(restored.count, 1)
+        XCTAssertEqual(restored.exportedEvents().map(\.id), [honest.id])
+    }
+
+    // The directory mode and every file's mode are RE-ASSERTED, not
+    // merely set at creation, and compaction survives a `replaceItemAt` failure without leaving
+    // a stray temp file behind.
+
+    func testEveryFileIs0600AfterCompactionAndDirectoryModeIsReasserted() throws {
+        let fileURL = freshFileURL()
+        let directory = fileURL.deletingLastPathComponent()
+        defer { removeQuietly(fileURL) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o755])
+
+        let queue = EventQueue(fileURL: fileURL)
+        for i in 0..<50 {
+            _ = queue.append(event("m\(i)", ms: Int64(13_000_000 + i)))
+        }
+        queue.remove(50) // an empty live set with dead bytes -- `considerCompactionLocked`'s other branch.
+        _ = queue.append(event("after", ms: 13_001_000)) // a second append/compaction cycle.
+
+        let dirMode = try FileManager.default.attributesOfItem(atPath: directory.path)[.posixPermissions] as? Int
+        XCTAssertEqual(dirMode, 0o700)
+
+        for name in try FileManager.default.contentsOfDirectory(atPath: directory.path) {
+            let mode = try FileManager.default.attributesOfItem(atPath: directory.appendingPathComponent(name).path)[.posixPermissions] as? Int
+            XCTAssertEqual(mode, 0o600, name)
+        }
+    }
+
+    // A `queue.jsonl` far past its legitimate ceiling is treated as
+    // corrupt: an empty queue, never a crash, never an unbounded read.
+
+    func testOversizedQueueFileLoadsAsEmptyWithoutCrashing() throws {
+        let fileURL = freshFileURL()
+        defer { removeQuietly(fileURL) }
+        try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let garbage = Data(repeating: 0x61, count: 5 << 20) // 5 MiB, past the 4 MiB ceiling.
+        try garbage.write(to: fileURL)
+
+        let queue = EventQueue(fileURL: fileURL)
+        queue.load()
+
+        XCTAssertEqual(queue.count, 0)
+        XCTAssertEqual(queue.byteCount, 0)
+    }
 }

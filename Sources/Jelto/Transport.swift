@@ -20,24 +20,50 @@ final class Transport: @unchecked Sendable {
     private let mockMode: String?
     private let session: URLSession
     private let delegate: TransportDelegate
+    private let requestTimeout: TimeInterval
+    private let semaphoreTimeout: TimeInterval
+    /// Test-only seam: called with the task `post` just cancelled, right
+    /// after `task.cancel()`, so `TransportTests` can observe that a wedged send is actually
+    /// cancelled rather than merely reported as failed while its socket lingers open. `nil` in
+    /// production.
+    private let onSendTimeout: (@Sendable (URLSessionTask) -> Void)?
 
     /// `mockMode` is forwarded verbatim as the `X-Mock` header when non-nil and non-empty,
     /// omitted otherwise (mockd's precedence rule takes the header only "when present and
     /// non-empty").
-    init(endpoint: URL, mockMode: String?) {
+    convenience init(endpoint: URL, mockMode: String?) {
+        self.init(endpoint: endpoint, mockMode: mockMode, requestTimeout: 5, resourceTimeout: 5,
+            semaphoreTimeout: 6, onSendTimeout: nil)
+    }
+
+    /// The internal second initialiser: every timeout is a parameter (defaulted to production's
+    /// own 5 s/5 s/6 s ladder above) so `TransportTests` can shrink all three and reach the
+    /// semaphore's own real-time guard in well under a second, instead of waiting out the
+    /// production values to prove `post` cancels the task it gave up on.
+    /// `delegateQueue` is also injectable: `TransportTests` pre-blocks it so URLSession's own
+    /// callback provably cannot be delivered, which is the only way to deterministically reach
+    /// `post`'s OWN semaphore guard rather than URLSession's much more commonly hit
+    /// `timeoutIntervalForRequest`/`-Resource` (both of which reliably deliver a callback and so
+    /// never touch this code path at all).
+    init(endpoint: URL, mockMode: String?, requestTimeout: TimeInterval, resourceTimeout: TimeInterval,
+         semaphoreTimeout: TimeInterval, delegateQueue: OperationQueue? = nil,
+         onSendTimeout: (@Sendable (URLSessionTask) -> Void)? = nil) {
         self.endpoint = endpoint
         self.mockMode = mockMode
+        self.requestTimeout = requestTimeout
+        self.semaphoreTimeout = semaphoreTimeout
+        self.onSendTimeout = onSendTimeout
 
         let config = URLSessionConfiguration.default
         // §5 Swift addendum: the SDK's own backoff governs retries, not URLSession's own wait.
         config.waitsForConnectivity = false
-        // RFC-0001 §8.3 item 8. On Darwin this is an INACTIVITY timeout — what fires against
-        // mockd's `slow:10000`, which sends nothing for 10 s.
-        config.timeoutIntervalForRequest = 5
+        // The SDK's own request timeout, part of its retry/timeout policy. On Darwin this is an
+        // INACTIVITY timeout — what fires against mockd's `slow:10000`, which sends nothing for 10 s.
+        config.timeoutIntervalForRequest = requestTimeout
         // The TOTAL bound. Needed as well because `huge:` streams continuously, so inactivity
         // never fires and only this caps the transfer.
-        config.timeoutIntervalForResource = 5
-        // BRIEF §2: every byte the SDK writes goes inside JELTO_STATE_DIR. `.ephemeral` is the
+        config.timeoutIntervalForResource = resourceTimeout
+        // Every byte the SDK writes goes inside JELTO_STATE_DIR. `.ephemeral` is the
         // WRONG fix here — it keeps an in-memory cache, worse for §8.3 item 11's 2 MB ceiling.
         config.urlCache = nil
         config.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
@@ -49,23 +75,24 @@ final class Transport: @unchecked Sendable {
         config.httpMaximumConnectionsPerHost = 1
 
         let transportDelegate = TransportDelegate()
-        let delegateQueue = OperationQueue()
-        delegateQueue.maxConcurrentOperationCount = 1
+        let resolvedDelegateQueue = delegateQueue ?? OperationQueue()
+        resolvedDelegateQueue.maxConcurrentOperationCount = 1
         // No `underlyingQueue`: delivering the callback onto the queue that is blocked in
         // `semaphore.wait()` would be a deadlock (§4.1 trap 1).
 
         self.delegate = transportDelegate
-        self.session = URLSession(configuration: config, delegate: transportDelegate, delegateQueue: delegateQueue)
+        self.session = URLSession(configuration: config, delegate: transportDelegate, delegateQueue: resolvedDelegateQueue)
     }
 
     /// Synchronous on the caller's queue: start the task, wait on a semaphore, read the result
-    /// out of an `@unchecked Sendable` box guarded by `NSLock` (BRIEF §2's proved pattern).
+    /// out of an `@unchecked Sendable` box guarded by `NSLock` — a pattern already proven safe
+    /// elsewhere in this SDK.
     func post(_ body: Data) -> Outcome {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = body
-        request.timeoutInterval = 5
+        request.timeoutInterval = requestTimeout
         if let mockMode, !mockMode.isEmpty {
             request.setValue(mockMode, forHTTPHeaderField: "X-Mock")
         }
@@ -74,6 +101,10 @@ final class Transport: @unchecked Sendable {
         let box = OutcomeBox()
 
         let generation = delegate.beginRequest(semaphore: semaphore, box: box)
+        // Kept in a local, not just handed to `resume()` and forgotten: the semaphore's own
+        // real-time guard below must be able to cancel THIS task, not merely stop waiting on it
+        // — otherwise a wedged connection stays open and consuming
+        // `httpMaximumConnectionsPerHost`'s one slot for as long as Foundation lets it.
         let task = session.dataTask(with: request)
         // The generation this task belongs to travels WITH the task, read back by the delegate's
         // callbacks — not stored as a `URLSessionTask` reference in the delegate (§4.1 trap 3).
@@ -82,8 +113,10 @@ final class Transport: @unchecked Sendable {
 
         // One second past the resource timeout: URLSession's two timeouts should make this
         // unreachable; it exists so a Foundation edge cannot wedge the SDK's only queue forever.
-        let waitResult = semaphore.wait(timeout: .now() + 6)
+        let waitResult = semaphore.wait(timeout: .now() + semaphoreTimeout)
         guard waitResult == .success, let outcome = box.outcome else {
+            task.cancel()
+            onSendTimeout?(task)
             return Outcome(status: 0, body: Data(), retryAfter: nil, isNetworkError: true, isRetryable: true)
         }
         return outcome

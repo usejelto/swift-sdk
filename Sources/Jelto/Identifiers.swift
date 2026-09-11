@@ -25,8 +25,8 @@ enum Identifiers {
     /// Bytes 0...5 are `at.low48` big-endian (masked with `0xFFFF_FFFF_FFFF` defensively); byte 6
     /// carries version 7, byte 8 the same RFC 4122 variant as `uuidV4()`. The 48-bit timestamp
     /// comes from `Instant.low48` so C15b's pre-epoch and past-`Int64` clocks still yield a
-    /// well-formed non-nil v7 — an `id` is a dedup key, not a second timestamp, and RFC-0001 §8.5
-    /// does not let the SDK move the clock to make one pretty.
+    /// well-formed non-nil v7 — an `id` is a dedup key, not a second timestamp, and the SDK must
+    /// not move the clock to make one pretty.
     static func uuidV7(at instant: Instant) -> String {
         var bytes = randomBytes16()
         let ts = instant.low48 & 0xFFFF_FFFF_FFFF

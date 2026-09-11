@@ -1,4 +1,4 @@
-// Arbitrary-precision signed milliseconds (C15b, RFC-0001 §8.5), represented as
+// Arbitrary-precision signed milliseconds, never lossily converted through floating point (C15b), represented as
 // sign-and-magnitude with base-10^9 little-endian UInt32 limbs. Constructors enforce:
 // - every limb is below 1,000,000,000;
 // - zero has an empty magnitude, otherwise the highest limb is nonzero;

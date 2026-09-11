@@ -26,8 +26,8 @@ final class BudgetTests: XCTestCase {
         return Engine()
     }
 
-    /// Resident size in KiB via `mach_task_basic_info` (BRIEF §2: "compiled and proved on this
-    /// toolchain"). No dependency — `Darwin` is stdlib.
+    /// Resident size in KiB via `mach_task_basic_info`, compiled and proved on this
+    /// toolchain. No dependency — `Darwin` is stdlib.
     private func residentSizeKB() -> UInt64 {
         var info = mach_task_basic_info()
         var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size / MemoryLayout<natural_t>.size)
@@ -45,14 +45,14 @@ final class BudgetTests: XCTestCase {
 
     //
     // The baseline is sampled AFTER `initialize` has bootstrapped (`exportState()` waits on the
-    // ready latch), so the figure is what the SDK itself holds once running — RFC-0001 §8.3 item
-    // 11's subject — rather than what the Swift runtime costs to start (BRIEF §7).
+    // ready latch), so the figure is what the SDK itself holds once running — the subject of the
+    // 2 MB RSS ceiling — rather than what the Swift runtime costs to start.
     func testRSSDeltaBudget() throws {
         let dir = freshDirectory()
         defer { removeQuietly(dir) }
         let engine = makeEngine(stateDir: dir, nowMS: 1_700_000_000_000)
 
-        engine.initialize(key: "prd_budget", app: nil)
+        engine.initialize(key: "prd_budget0001", app: nil)
         _ = engine.exportState() // waits on the ready latch: bootstrap has finished.
 
         let baselineKB = residentSizeKB()
@@ -69,10 +69,10 @@ final class BudgetTests: XCTestCase {
         print("BudgetTests.testRSSDeltaBudget: baseline=\(baselineKB) KiB after=\(afterKB) KiB delta=\(deltaKB) KiB (ceiling 2048 KiB)")
 
         // If the budget does not hold, report the measured number and stop — the ceiling is
-        // RFC-0001's, not this test's (BRIEF §7).
+        // set by the spec, not this test.
         XCTAssertLessThanOrEqual(
             deltaKB, 2_048,
-            "RSS delta \(deltaKB) KiB (baseline \(baselineKB) KiB, after \(afterKB) KiB) exceeds the 2 MB ceiling (RFC-0001 §8.3 item 11)"
+            "RSS delta \(deltaKB) KiB (baseline \(baselineKB) KiB, after \(afterKB) KiB) exceeds the 2 MB ceiling (the SDK's memory and latency budget)"
         )
     }
 
@@ -81,7 +81,7 @@ final class BudgetTests: XCTestCase {
         defer { removeQuietly(dir) }
         let engine = makeEngine(stateDir: dir, nowMS: 1_700_000_000_000)
 
-        engine.initialize(key: "prd_budget", app: nil)
+        engine.initialize(key: "prd_budget0001", app: nil)
         _ = engine.exportState() // waits on the ready latch: bootstrap has finished.
 
         let iterations = 10_000
@@ -104,10 +104,10 @@ final class BudgetTests: XCTestCase {
         print("BudgetTests.testPerTrackP99Budget: iterations=\(iterations) track_p99_us=\(p99US) (ceiling 1000 us)")
 
         // If the budget does not hold, report the measured number and stop — the ceiling is
-        // RFC-0001's, not this test's (BRIEF §7).
+        // set by the spec, not this test.
         XCTAssertLessThanOrEqual(
             p99US, 1_000,
-            "track p99 \(p99US) us exceeds the 1 ms ceiling (RFC-0001 §8.3 item 11)"
+            "track p99 \(p99US) us exceeds the 1 ms ceiling (the SDK's memory and latency budget)"
         )
     }
 }

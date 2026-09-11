@@ -50,14 +50,14 @@ final class EngineTests: XCTestCase {
         defer { removeQuietly(dir) }
         let engine = makeEngine(stateDir: dir, nowMS: 1_700_000_000_000)
 
-        engine.initialize(key: "prd_test", app: nil)
+        engine.initialize(key: "prd_conform001", app: nil)
         let export1 = try decodeExport(engine)
         let id1 = export1["install_id"] as? String
         XCTAssertNotNil(id1)
         XCTAssertFalse(id1?.isEmpty ?? true)
         XCTAssertEqual(heartbeatCount(export1), 1)
 
-        engine.initialize(key: "prd_test", app: nil) // once-only: must be a no-op.
+        engine.initialize(key: "prd_conform001", app: nil) // once-only: must be a no-op.
         let export2 = try decodeExport(engine)
         XCTAssertEqual(export2["install_id"] as? String, id1)
         XCTAssertEqual(heartbeatCount(export2), 1) // still exactly one -- no second bootstrap ran.
@@ -70,7 +70,7 @@ final class EngineTests: XCTestCase {
         defer { removeQuietly(dir) }
         let engine = makeEngine(stateDir: dir, nowMS: 1_700_000_000_000)
 
-        engine.initialize(key: "prd_test", app: nil)
+        engine.initialize(key: "prd_conform001", app: nil)
         _ = try decodeExport(engine) // wait for bootstrap.
 
         engine.disable()
@@ -82,7 +82,7 @@ final class EngineTests: XCTestCase {
         let contentsAfterTrack = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? ["not-empty"]
         XCTAssertEqual(contentsAfterTrack, [])
 
-        engine.initialize(key: "prd_test", app: nil) // the re-arm.
+        engine.initialize(key: "prd_conform001", app: nil) // the re-arm.
         _ = try decodeExport(engine) // wait for the re-arm's bootstrap.
         XCTAssertFalse(engine.installID().isEmpty)
 
@@ -100,20 +100,20 @@ final class EngineTests: XCTestCase {
         let dayTwoMS: Int64 = 1_788_220_800_000 // dayOneMS + 24h.
 
         let engine1 = makeEngine(stateDir: dir, nowMS: dayOneMS)
-        engine1.initialize(key: "prd_test", app: nil)
+        engine1.initialize(key: "prd_conform001", app: nil)
         let export1 = try decodeExport(engine1)
         XCTAssertEqual(heartbeatCount(export1), 1)
         XCTAssertEqual(export1["last_heartbeat_day"] as? String, String(dayOneMS / 86_400_000))
 
         // A second `Engine`, same directory, same instant: no second heartbeat.
         let engine2 = makeEngine(stateDir: dir, nowMS: dayOneMS)
-        engine2.initialize(key: "prd_test", app: nil)
+        engine2.initialize(key: "prd_conform001", app: nil)
         let export2 = try decodeExport(engine2)
         XCTAssertEqual(heartbeatCount(export2), 1)
 
         // A third `Engine`, same directory, the next UTC day: a second heartbeat.
         let engine3 = makeEngine(stateDir: dir, nowMS: dayTwoMS)
-        engine3.initialize(key: "prd_test", app: nil)
+        engine3.initialize(key: "prd_conform001", app: nil)
         let export3 = try decodeExport(engine3)
         XCTAssertEqual(heartbeatCount(export3), 2)
         XCTAssertEqual(export3["last_heartbeat_day"] as? String, String(dayTwoMS / 86_400_000))
@@ -127,7 +127,7 @@ final class EngineTests: XCTestCase {
         let t0: Int64 = 1_700_000_000_000
 
         let engine1 = makeEngine(stateDir: dir, nowMS: t0)
-        engine1.initialize(key: "prd_test", app: nil)
+        engine1.initialize(key: "prd_conform001", app: nil)
         let export1 = try decodeExport(engine1)
         guard let dueAtString = export1["install_due_at"] as? String, let dueAt = Int64(dueAtString) else {
             XCTFail("install_due_at missing from the export")
@@ -137,7 +137,7 @@ final class EngineTests: XCTestCase {
         XCTAssertLessThan(dueAt, t0 + 21_600_000)
 
         let engine2 = makeEngine(stateDir: dir, nowMS: t0)
-        engine2.initialize(key: "prd_test", app: nil)
+        engine2.initialize(key: "prd_conform001", app: nil)
         let export2 = try decodeExport(engine2)
         XCTAssertEqual(export2["install_due_at"] as? String, dueAtString) // UNCHANGED.
     }
@@ -150,14 +150,14 @@ final class EngineTests: XCTestCase {
         let t0: Int64 = 1_700_000_000_000
 
         let engine1 = makeEngine(stateDir: dir, nowMS: t0)
-        engine1.initialize(key: "prd_test", app: nil)
+        engine1.initialize(key: "prd_conform001", app: nil)
         _ = try decodeExport(engine1) // establishes install_due_at in [t0, t0 + 21_600_000).
 
         // A second `Engine`, same directory, pinned past the maximum possible due_at -- forces
         // the deadline elapsed without reaching into `Store` directly (it is `private` here).
         let past = t0 + 21_600_000 + 1
         let engine2 = makeEngine(stateDir: dir, nowMS: past)
-        engine2.initialize(key: "prd_test", app: nil)
+        engine2.initialize(key: "prd_conform001", app: nil)
         _ = try decodeExport(engine2) // waits for bootstrap only, not for the pump's own tick.
 
         // Settle the pump deterministically through the same idle barrier the host uses, rather
@@ -183,7 +183,7 @@ final class EngineTests: XCTestCase {
         let dir = freshDirectory()
         defer { removeQuietly(dir) }
         let engine = makeEngine(stateDir: dir, nowMS: 1_700_000_000_000)
-        engine.initialize(key: "prd_test", app: nil)
+        engine.initialize(key: "prd_conform001", app: nil)
         let baseline = heartbeatCount(try decodeExport(engine)) // 1, from bootstrap's own day heartbeat.
 
         engine.setProps(["license": "paid"])

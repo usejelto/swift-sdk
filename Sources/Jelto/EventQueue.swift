@@ -1,11 +1,12 @@
-// Append-only queue with an in-memory mirror (RFC-0001 §8.3 item 6, C11).
+// Append-only queue with an in-memory mirror, capped at 1 MB or 1,000 events with the oldest
+// dropped first (C11).
 
 import Foundation
 
 /// A single property value, keeping the literal it was given rather than a parsed `Double` — W1
 /// sends `{"n":1.5}` and nothing in this SDK turns a wire number into a `Double`. `Codable` here
 /// is this file's queue-line encoding (`{"s":...}` / `{"n":...}` / `{"b":...}`), not the wire
-/// encoding, which is plan 3's separate function.
+/// encoding, which is a separate function.
 @_spi(Conformance) public enum WireValue: Sendable, Equatable {
     case string(String)
     case number(String)
@@ -112,6 +113,10 @@ final class EventQueue: @unchecked Sendable {
     private static let maxBytes = 1 << 20 // 1_048_576
     private static let compactionFloorBytes = 65_536
     private static let newlineByte: UInt8 = 0x0A
+    /// `maxBytes` bounds the LIVE mirror; this bounds the file itself, dead bytes included, so a
+    /// forged or corrupted `queue.jsonl` many times that size cannot make `load()` allocate an
+    /// unbounded buffer before a single line is even parsed.
+    private static let maxQueueFileBytes = 4 << 20 // 4_194_304 (4 MiB)
 
     private static let jsonEncoder: JSONEncoder = {
         let e = JSONEncoder()
@@ -165,8 +170,7 @@ final class EventQueue: @unchecked Sendable {
         let receipt = encodeReceipt(receiptID)
         let data = receipt + Data(next.map { encodeEventLine($0.event).line + "\n" }.joined().utf8)
         do {
-            try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            StateDirectory.ensureMode0700(fileURL.deletingLastPathComponent())
             try handle?.close()
             handle = nil
             try data.write(to: fileURL, options: .atomic)
@@ -273,7 +277,7 @@ final class EventQueue: @unchecked Sendable {
         return dropped
     }
 
-    /// RFC-0001 §8.3 item 6: "cap 1 MB or 1 000 events, oldest dropped first." The
+    /// The queue caps at 1 MB or 1,000 events, oldest dropped first. The
     /// `entries.count > 1` guard on the byte half is deliberate and matches the reference host: a
     /// queue that dropped its only event could never hold a single large one.
     @discardableResult
@@ -325,6 +329,13 @@ final class EventQueue: @unchecked Sendable {
         try? handle?.close()
         handle = nil
 
+        // Stat before reading: a `queue.jsonl` many times its legitimate ceiling — corrupt,
+        // forged, or someone else's data landed in this directory — must not make `load()`
+        // allocate an unbounded buffer before a single line is even parsed.
+        // The queue is treated exactly like a missing file: empty, not a crash.
+        let fileSize = ((try? FileManager.default.attributesOfItem(atPath: fileURL.path))?[.size] as? Int) ?? 0
+        guard fileSize <= Self.maxQueueFileBytes else { return }
+
         guard var data = try? Data(contentsOf: fileURL) else { return }
 
         if !data.isEmpty, data[data.index(before: data.endIndex)] != Self.newlineByte {
@@ -365,7 +376,12 @@ final class EventQueue: @unchecked Sendable {
     }
 
     /// A line that decodes as neither record type, or whose `t` fails `Instant(decimal:)`, is
-    /// skipped (§4.2) — a torn event line costs that event, nothing else.
+    /// skipped (§4.2) — a torn event line costs that event, nothing else. So is one that decodes
+    /// cleanly but fails the SAME grammar `WireGate`/`Grammar` enforce on the way IN — a `queue.jsonl`
+    /// on disk is not trusted input, and a tampered `n`, a `.number` literal that is not RFC 8259
+    /// (the exact hole `Wire.swift`'s `appendJSONValue` writes raw), or a `context.platform` outside
+    /// wire §5.2's enums must cost only that one line, not be replayed straight back into a future
+    /// request body.
     private func replayLineLocked(_ lineData: Data.SubSequence, decoder: JSONDecoder, pendingTransitionID: String?) {
         let bytes = Data(lineData)
         if let ack = try? decoder.decode(QueueAckLine.self, from: bytes) {
@@ -377,7 +393,10 @@ final class EventQueue: @unchecked Sendable {
             return
         }
         guard let line = try? decoder.decode(QueueEventLine.self, from: bytes),
-              let instant = Instant(decimal: line.t) else {
+              let instant = Instant(decimal: line.t),
+              Grammar.isEventName(line.n),
+              EventQueue.propsAreWellFormed(line.p),
+              EventQueue.contextIsWellFormed(line.context) else {
             return
         }
         let event = QueuedEvent(id: line.id, name: line.n, t: instant, props: line.p, isHeartbeat: line.hb, context: line.context)
@@ -389,6 +408,28 @@ final class EventQueue: @unchecked Sendable {
         let lineBytes = bytes.count + 1 // the line as it was read from disk, plus its newline
         entries.append((event: event, lineBytes: lineBytes))
         liveBytes += lineBytes
+    }
+
+    /// Every `.number` literal is the exact ASCII bytes `Wire.swift`'s `appendJSONValue` writes
+    /// raw into a future request body; one that is not RFC 8259 §6 could splice arbitrary JSON
+    /// into that body, mirroring `WireGate.validateTrackProps`'s own check on
+    /// the way in. `nil` and an empty map both pass — nothing to check.
+    private static func propsAreWellFormed(_ props: [String: WireValue]?) -> Bool {
+        guard let props else { return true }
+        for value in props.values {
+            if case .number(let literal) = value, !Grammar.isJSONNumberLiteral(literal) {
+                return false
+            }
+        }
+        return true
+    }
+
+    /// A restored `context.platform.os`/`.arch` must still be one of wire §5.2's enums; anything
+    /// else means the line was corrupted or tampered with after `Platform.detect` wrote it.
+    /// `nil` passes — an event with no frozen context re-resolves the live platform.
+    private static func contextIsWellFormed(_ context: EventContext?) -> Bool {
+        guard let context else { return true }
+        return Grammar.isPlatformOS(context.platform.os) && Grammar.isPlatformArch(context.platform.arch)
     }
 
     /// The only whole-file write in this file, triggered after a head advance or after `load()`.
@@ -409,13 +450,26 @@ final class EventQueue: @unchecked Sendable {
             buffer.append(contentsOf: Array((line + "\n").utf8))
         }
         guard (try? buffer.write(to: tmpFileURL, options: [.atomic])) != nil else { return }
+        // `.atomic` creates a brand-new file at `tmpFileURL` under the process umask, not 0600 —
+        // unlike `openHandleLocked`'s `createFile(…attributes:)`, `write(to:options:.atomic)` has
+        // no attributes parameter of its own.
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: tmpFileURL.path)
 
         try? handle?.close()
         handle = nil
 
         guard (try? FileManager.default.replaceItemAt(fileURL, withItemAt: tmpFileURL)) != nil else {
+            // The swap failed; the old `fileURL` (if any) is still authoritative and still
+            // replays to the same live set (this function's own doc comment). The half-written
+            // temp file must not be left behind to confuse the next compaction attempt or a
+            // directory listing a conformance check reads.
+            try? FileManager.default.removeItem(at: tmpFileURL)
             return
         }
+        // `replaceItemAt` is not documented to preserve the NEW item's mode, only metadata it
+        // chooses to carry over from the item being replaced; re-assert explicitly rather than
+        // trust it.
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
 
         deadBytes = receipt.count
         openHandleLocked()
@@ -425,11 +479,11 @@ final class EventQueue: @unchecked Sendable {
     private func openHandleLocked() {
         guard handle == nil else { return }
         let directory = fileURL.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(
-            at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700]
-        )
+        StateDirectory.ensureMode0700(directory)
         if !FileManager.default.fileExists(atPath: fileURL.path) {
             FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: [.posixPermissions: 0o600])
+        } else {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
         }
         handle = try? FileHandle(forWritingTo: fileURL)
         _ = try? handle?.seekToEnd()

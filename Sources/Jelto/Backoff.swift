@@ -1,4 +1,4 @@
-// Composes retry backoff with Retry-After (RFC-0001 §8.3 item 8, wire §9).
+// Composes retry backoff with Retry-After (wire §9).
 // Only the duration multiplier uses Double; instants remain exact integers.
 enum Backoff {
     static let firstStepMS = 1_000
@@ -47,21 +47,24 @@ enum Backoff {
         return msOverflow ? Int.max : ms
     }
 
-    /// R6 — the two stderr substrings, asserted verbatim by the scenarios (BRIEF §6). `nil` when
+    /// R6 — the two stderr substrings, asserted verbatim by the scenarios. `nil` when
     /// the header is absent, empty, or a plain `delay-seconds` at or below the 3 600 s ceiling.
     /// Quotes the header's TRIMMED ORIGINAL TEXT rather than a parsed number, so a 40-digit value
-    /// renders as what was received rather than as `Int.max`. `Backoff` itself never writes to
-    /// stderr; the engine (plan 5) logs the returned string through `DebugLog` on every refusal.
+    /// renders as what was received rather than as `Int.max` — through `DebugLog.display`, since
+    /// this text came straight off the wire and an unsanitized control character (a raw `\n`, most
+    /// of all) would let a hostile server forge a second stderr line inside this one.
+    /// `Backoff` itself never writes to stderr; the engine logs the returned
+    /// string through `DebugLog` on every refusal.
     static func headerNote(_ header: String?) -> String? {
         guard let header else { return nil }
         let trimmed = Backoff.trimOWS(header)
         guard !trimmed.isEmpty else { return nil }
 
         guard let ms = Backoff.retryAfterMS(header) else {
-            return "Retry-After: \"\(trimmed)\" is not delay-seconds and is treated as absent"
+            return "Retry-After: \(DebugLog.display(trimmed)) is not delay-seconds and is treated as absent"
         }
         guard ms > Backoff.ceilingMS else { return nil }
-        return "Retry-After: \"\(trimmed)\" exceeds the 3600 s ceiling and is clamped to 3600 s"
+        return "Retry-After: \(DebugLog.display(trimmed)) exceeds the 3600 s ceiling and is clamped to 3600 s"
     }
 
     /// R1-R3, R7-R10, the whole composition, in order:
@@ -100,8 +103,8 @@ enum Backoff {
     }
 
     /// Clamps `jitter` into `jitterRange`, without trapping on a non-finite input. `Int(Double)`
-    /// traps on NaN, which is a crash into the host RFC-0001 §8.3 item 10 forbids ("the SDK never
-    /// throws into the host; every failure path is swallowed and logged"), so NaN is special-cased
+    /// traps on NaN, which would be a crash into the host — the SDK never throws into the host;
+    /// every failure path is swallowed and logged — so NaN is special-cased
     /// to `1.0` before it can reach `min`/`max` at all — those propagate NaN rather than clamping
     /// it. `+infinity` and `-infinity` need no special case: `max(+inf, 0.8)` is `+inf` and
     /// `min(+inf, 1.2)` is `1.2` (and symmetrically `0.8` for `-infinity`), because a comparison

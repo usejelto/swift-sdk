@@ -19,7 +19,7 @@ final class DebugLog: @unchecked Sendable {
         self.init(enabled: enabled, sink: DebugLog.stderrSink)
     }
 
-    /// The internal second initialiser (BRIEF §2 item 4): takes a sink so the unit tests can read
+    /// The internal second initialiser: takes a sink so the unit tests can read
     /// what would have gone to stderr instead of writing to the process's real stderr.
     init(enabled: Bool, sink: @escaping @Sendable (Data) -> Void) {
         self.enabled = enabled

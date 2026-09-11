@@ -68,8 +68,8 @@ if ProcessInfo.processInfo.environment["JELTO_APP_VERSION"] == nil {
     setenv("JELTO_APP_VERSION", "1.0.0", 1)
 }
 
-// The host and the SDK share ONE clock: `Jelto.conformanceClock` is the engine's own instance
-// (BRIEF Appendix C's round-2 note 2), not a private copy. Touching it for the first time here
+// The host and the SDK share ONE clock: `Jelto.conformanceClock` is the engine's own instance,
+// not a private copy. Touching it for the first time here
 // lazily constructs `Engine`, which reads `JELTO_NOW` itself (Engine.swift §2.0) and pins to the
 // same value validated below; the explicit `.pin(to:)` call keeps this host's own fatal
 // misconfiguration check — which must run BEFORE anything is committed — in the same shape plan 1
@@ -154,7 +154,7 @@ func tokenize(_ line: String) -> [String] {
 
 //
 // `JSONSerialization` would re-render `{"n":29.90}` as `29.9`, destroying the exact `Double`
-// round-trip `WireValue.number` exists to preserve (BRIEF Appendix C, B1). This scanner never
+// round-trip `WireValue.number` exists to preserve. This scanner never
 // parses a number into a `Double`/`Int`/`NSNumber`/`Decimal` at any point: it captures the run of
 // `[-+.0-9eE]` characters and hands the literal straight through — `Grammar.isJSONNumberLiteral`,
 // inside the SDK, is what later judges whether it is legal (spec/sdk-conformance.md §5's own

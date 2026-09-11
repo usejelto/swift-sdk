@@ -5,7 +5,7 @@ import Foundation
 public enum Jelto {
     private static let engine = Engine()
 
-    /// `endpoint` is for a customer on a first-party subdomain (RFC-0001 §10), who serves
+    /// `endpoint` is for a customer on a first-party subdomain, who serves
     /// `/v1/e` on their own hostname. Omit it and the SDK sends to `spec/wire-v1.md` §1's
     /// production host, which is what every ordinary integration wants: a REQUIRED endpoint is
     /// one more thing every integration can get wrong, and getting it wrong is silent.
