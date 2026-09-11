@@ -1,0 +1,12 @@
+{
+  "name": "swift-test-tools",
+  "version": "0.1.0",
+  "producer": "contracts",
+  "producer_commit": "35b86d56c285719d5f1eddd083a9b0a73aceac3d",
+  "files": {
+    "install.py": {
+      "source": "install.py",
+      "sha256": "6de609fd236cabcec453f8c6f0a7a34f0252c6652f6d05d55cec0d41257f45f0"
+    }
+  }
+}

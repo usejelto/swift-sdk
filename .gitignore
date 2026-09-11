@@ -1,0 +1,14 @@
+.build/
+.swiftpm/
+artifacts/
+
+# Local dependencies, test tools and environment configuration.
+.contracts/
+__pycache__/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+
+/release-artifacts/
