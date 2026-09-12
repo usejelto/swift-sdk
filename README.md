@@ -42,7 +42,7 @@ library. See [CONTRIBUTING.md](CONTRIBUTING.md) for prerequisites and verificati
 The component-owned workflows become active when this directory is the
 repository root. CI runs local package tests; release CI additionally requires
 conformance twice and the configured contracts pin where applicable.
-See [RELEASING.md](RELEASING.md) for initial publication, trusted publishing,
+See [RELEASING.md](https://github.com/usejelto/swift-sdk/blob/main/RELEASING.md) for initial publication, trusted publishing,
 version tags, and retries. Publishing stays disabled until explicitly configured.
 
 ## Community and license

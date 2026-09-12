@@ -1,6 +1,6 @@
 {
   "component": "swift",
-  "repository": "",
+  "repository": "usejelto/swift-sdk",
   "contracts": {
     "version": "0.1.0",
     "url": "",
