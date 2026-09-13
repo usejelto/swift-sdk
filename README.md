@@ -4,12 +4,14 @@ Privacy-focused desktop analytics for Swift apps on macOS 12 or later.
 The standalone Swift 6 package contains the `Jelto` library, unit tests and a
 `conformance-host` executable for SDK verification.
 
-## Install locally
+## Install
 
-Version 0.1.0 is prepared for release; a public SwiftPM release is not yet
-available. In Xcode, add this checkout as a local package dependency and link
-the `Jelto` library product to your app target. For a source archive, run
-`make package` and extract `artifacts/jelto-swift-0.1.0.zip` first.
+In Xcode, open **File → Add Package Dependencies**, enter
+`https://github.com/usejelto/swift-sdk`, choose the latest release and link the
+`Jelto` library product to your app target. In a `Package.swift` manifest, add
+the same URL as a package dependency and `Jelto` as a target dependency. For
+local development, add this checkout as a local package instead; `make package`
+writes a source archive to `artifacts/`.
 
 Initialize once after your app decides analytics may start, then report a
 registered action:
@@ -52,8 +54,7 @@ Questions, bug reports and documentation improvements are welcome. See
 [Contributing](https://github.com/usejelto/swift-sdk/blob/main/CONTRIBUTING.md),
 [Code of Conduct](https://github.com/usejelto/swift-sdk/blob/main/CODE_OF_CONDUCT.md), and
 [Security policy](https://github.com/usejelto/swift-sdk/blob/main/SECURITY.md).
-Until the public repository is available, these files are also included in the
-source root; contact [taha@jelto.io](mailto:taha@jelto.io) for help.
+Contact [taha@jelto.io](mailto:taha@jelto.io) for anything else.
 
 Jelto-owned software and associated documentation use the [MIT license](LICENSE).
 Third-party materials retain their own terms, including the Contributor Covenant
