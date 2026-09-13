@@ -35,7 +35,7 @@ Electron, Swift, .NET and Tauri also need a published contracts archive:
 ~~~sh
 python3 "$JELTO_RELEASE_TOOL" configure \
   --repository ACTUAL_OWNER/ACTUAL_REPOSITORY \
-  --contracts-url https://github.com/ACTUAL_OWNER/jelto-contracts/releases/download/v0.1.1/jelto-contracts-0.1.1.zip \
+  --contracts-url https://github.com/ACTUAL_OWNER/jelto-contracts/releases/download/v0.1.2/jelto-contracts-0.1.2.zip \
   --contracts-sha256 ACTUAL_64_CHARACTER_SHA256
 ~~~
 
@@ -119,7 +119,11 @@ to avoid moving latest backward.
 
 Rerun or dispatch the same tag; never move it to fix a failed release. Publication
 checks registry contents before skipping an existing version. Only a 404 counts
-as absent; authorization and network errors fail. NuGet comparison excludes the
+as absent; authorization and network errors fail. The wait before the installation
+check needs both the immutable bytes and the index installers resolve (npm's
+abbreviated packument, the crates.io sparse index, NuGet's flat-container version
+list): the bytes appear seconds to minutes before the index, and a published version
+the index does not list yet is awaited, not failed. NuGet comparison excludes the
 repository-added signature, while npm and Cargo comparisons require exact bytes.
 Conflicting bytes require investigation and a new version, not overwriting.
 
