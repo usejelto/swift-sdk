@@ -2,8 +2,8 @@
   "component": "swift",
   "repository": "usejelto/swift-sdk",
   "contracts": {
-    "version": "0.1.0",
-    "url": "https://github.com/usejelto/contracts/releases/download/v0.1.0/jelto-contracts-0.1.0.zip",
-    "sha256": "f679a41c50ebce0e9fd6eebb09fdd1733633b0aee3e59728aa7dec95e3ed1aeb"
+    "version": "0.1.1",
+    "url": "https://github.com/usejelto/contracts/releases/download/v0.1.1/jelto-contracts-0.1.1.zip",
+    "sha256": "689cddcd4ebb630968414c657e6785ce41632e4e05d3f65281ba93e927345608"
   }
 }
