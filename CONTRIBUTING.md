@@ -38,8 +38,7 @@ sibling checkout implicitly.
 
 ```sh
 make test
-make conformance
-make conformance
+make conformance-twice
 make package
 ```
 

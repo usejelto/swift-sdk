@@ -60,9 +60,9 @@ jobs:
         run: make test build package
       - name: Conformance twice
         if: inputs.release || inputs.conformance
-        run: |
-          make conformance JELTO_CONTRACTS_DIR="$GITHUB_WORKSPACE/.contracts"
-          make conformance JELTO_CONTRACTS_DIR="$GITHUB_WORKSPACE/.contracts"
+        # Both passes run concurrently in the Makefile: each runner has its own
+        # mockd and state directories, so the gate costs one pass's wall time.
+        run: make conformance-twice JELTO_CONTRACTS_DIR="$GITHUB_WORKSPACE/.contracts"
 
       - name: Prepare release artifacts
         if: inputs.release
