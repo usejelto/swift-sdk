@@ -2,7 +2,7 @@
   "name": "swift-test-tools",
   "version": "0.1.0",
   "producer": "contracts",
-  "producer_commit": "35b86d56c285719d5f1eddd083a9b0a73aceac3d",
+  "producer_commit": "662dec7ac666a510aca03cb683ecedbcba693434",
   "files": {
     "install.py": {
       "source": "install.py",
