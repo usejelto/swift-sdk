@@ -13,8 +13,15 @@ final class InstallOriginTests: XCTestCase {
         unsetenv("JELTO_MOCK")
         let sdk = Engine()
         sdk.initialize(key: "prd_conform001", app: "desktop", installOrigin: origin)
-        _ = sdk.exportState()
+        waitForIdle(sdk)
         return sdk
+    }
+
+    private func waitForIdle(_ sdk: Engine, file: StaticString = #filePath, line: UInt = #line) {
+        _ = sdk.exportState()
+        // Bootstrap readiness precedes the worker cycle that enqueues the immediate install.
+        // Settle that cycle before reading its queue, without advancing the pinned clock.
+        XCTAssertTrue(sdk.awaitBarrier(sdk.openBarrier(), timeoutMS: 2_000), file: file, line: line)
     }
 
     private func events(_ directory: URL) -> [QueuedEvent] {
@@ -102,7 +109,7 @@ final class InstallOriginTests: XCTestCase {
         let sdk = engine(directory, origin: .new)
         let oldID = sdk.installID()
         sdk.reset()
-        _ = sdk.exportState()
+        waitForIdle(sdk)
         XCTAssertNotEqual(sdk.installID(), oldID)
         XCTAssertEqual(Store(directory: directory).load().installOrigin, "unknown")
         let claims = events(directory).filter { $0.name == "install" }
@@ -110,7 +117,7 @@ final class InstallOriginTests: XCTestCase {
         XCTAssertEqual(claims.first?.props?["install_origin"], .string("unknown"))
         sdk.disable()
         sdk.initialize(key: "prd_conform001", app: "desktop", installOrigin: .existing)
-        _ = sdk.exportState()
+        waitForIdle(sdk)
         XCTAssertEqual(Store(directory: directory).load().installOrigin, "existing")
         XCTAssertEqual(events(directory).first { $0.name == "install" }?.props?["install_origin"], .string("existing"))
     }
