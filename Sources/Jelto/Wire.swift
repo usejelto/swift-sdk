@@ -12,7 +12,7 @@ enum Wire {
     static let maxReasonChars = 64 // §4
 
     /// The SDK's own `v`. Must itself satisfy `Grammar.isClientVersion` — asserted by a unit test.
-    static let sdkClientVersion = "swift/0.2.0"
+    static let sdkClientVersion = "swift/0.2.1"
 
     /// Ascending UTF-8 byte order, used for prop-key iteration so two encodings of the same map
     /// are byte-identical (C20's congruence check) and so a rejection log picks a deterministic

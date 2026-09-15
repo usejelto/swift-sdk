@@ -426,8 +426,8 @@ while let rawLine = readLine(strippingNewline: true) {
         if tokens.count >= 2 {
             let key = tokens[1]
             let app = tokens.count > 2 ? tokens[2] : nil
-            let start = DispatchTime.now().uptimeNanoseconds
             let origin = Jelto.InstallOrigin(rawValue: ProcessInfo.processInfo.environment["JELTO_INSTALL_ORIGIN"] ?? "") ?? .unknown
+            let start = DispatchTime.now().uptimeNanoseconds
             Jelto.initialize(key: key, app: app, installOrigin: origin)
             let elapsedNS = DispatchTime.now().uptimeNanoseconds - start
             let us = Int(elapsedNS / 1_000)
