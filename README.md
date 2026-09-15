@@ -50,7 +50,7 @@ followed by initialization can capture a newly supplied category. Do not put
 ## Development and conformance
 
 From this directory, run `make build` and `make test` (or `swift build` and
-`swift test`). Set `JELTO_CONTRACTS_DIR` to an extracted Jelto contracts **0.1.0**
+`swift test`). Set `JELTO_CONTRACTS_DIR` to an extracted Jelto contracts **0.1.5**
 archive, then run `make conformance` twice before certification. The archive
 supplies the Go runner, mock server and wire schema without the backend source.
 

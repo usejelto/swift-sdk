@@ -21,12 +21,12 @@ Fork and clone this repository, create a branch from `main`, and run commands
 from this component's root. The standalone checkout contains its build inputs;
 you do not need the private Jelto backend.
 
-Shared conformance needs a verified Jelto contracts **0.1.0** archive. Download
+Shared conformance needs a verified Jelto contracts **0.1.5** archive. Download
 it and its checksum from the [contracts releases](https://github.com/usejelto/contracts/releases)
 when published, then install it into an empty directory:
 
 ```sh
-python3 vendor/test-tools/install.py /absolute/path/jelto-contracts-0.1.0.zip SHA256 /absolute/path/contracts --version 0.1.0
+python3 vendor/test-tools/install.py /absolute/path/jelto-contracts-0.1.5.zip SHA256 /absolute/path/contracts --version 0.1.5
 export JELTO_CONTRACTS_DIR=/absolute/path/contracts
 ```
 
