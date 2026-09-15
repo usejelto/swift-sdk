@@ -298,14 +298,13 @@ final class Engine: @unchecked Sendable {
 
         let now = clock.now()
 
-        // Persist an install deadline only once so relaunch cannot restart the countdown (C4c).
+        // Persist the draw instant once so relaunch resumes the immediate deadline (C4c).
         let stateAfterInstall = store.update { state in
             if state.installID.isEmpty || state.installID == Identifiers.nilUUID {
                 state.installID = Identifiers.uuidV4()
             }
             if !state.installClaimed && state.installDueAt == nil {
-                let delay = Int64.random(in: 0..<21_600_000) // §8.2 item 4: 0-6 h
-                state.installDueAt = now.adding(delay)
+                state.installDueAt = now
             }
         }
 
@@ -526,7 +525,8 @@ final class Engine: @unchecked Sendable {
             installEnqueuedThisRun = true
             eventQueue.append(event)
             lock.lock()
-            pending = true
+            // Queue immediately while preserving the two-second initial flush (C7).
+            if initFlushAt == nil { pending = true }
             lock.unlock()
             return (nil, true)
         }
@@ -891,11 +891,10 @@ final class Engine: @unchecked Sendable {
             return
         }
         let newID = Identifiers.uuidV4()
-        let delay = Int64.random(in: 0..<21_600_000)
         guard store.commit({ state in
             state.installID = newID
             state.installClaimed = false
-            state.installDueAt = now.adding(delay)
+            state.installDueAt = now
             state.installFirstTry = nil
             state.lastHeartbeatDay = nil
             state.lastAppVersion = Platform.observedAppVersion(appVersionOverride)

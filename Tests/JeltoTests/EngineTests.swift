@@ -133,10 +133,9 @@ final class EngineTests: XCTestCase {
             XCTFail("install_due_at missing from the export")
             return
         }
-        XCTAssertGreaterThanOrEqual(dueAt, t0)
-        XCTAssertLessThan(dueAt, t0 + 21_600_000)
+        XCTAssertEqual(dueAt, t0)
 
-        let engine2 = makeEngine(stateDir: dir, nowMS: t0)
+        let engine2 = makeEngine(stateDir: dir, nowMS: t0 + 25_200_000)
         engine2.initialize(key: "prd_conform001", app: nil)
         let export2 = try decodeExport(engine2)
         XCTAssertEqual(export2["install_due_at"] as? String, dueAtString) // UNCHANGED.
@@ -151,28 +150,21 @@ final class EngineTests: XCTestCase {
 
         let engine1 = makeEngine(stateDir: dir, nowMS: t0)
         engine1.initialize(key: "prd_conform001", app: nil)
-        _ = try decodeExport(engine1) // establishes install_due_at in [t0, t0 + 21_600_000).
-
-        // A second `Engine`, same directory, pinned past the maximum possible due_at -- forces
-        // the deadline elapsed without reaching into `Store` directly (it is `private` here).
-        let past = t0 + 21_600_000 + 1
-        let engine2 = makeEngine(stateDir: dir, nowMS: past)
-        engine2.initialize(key: "prd_conform001", app: nil)
-        _ = try decodeExport(engine2) // waits for bootstrap only, not for the pump's own tick.
+        _ = try decodeExport(engine1) // bootstrap draws an immediate deadline at t0.
 
         // Settle the pump deterministically through the same idle barrier the host uses, rather
         // than a sleep: "tick until quiet."
-        let firstSeq = engine2.openBarrier()
-        XCTAssertTrue(engine2.awaitBarrier(firstSeq, timeoutMS: 2_000))
+        let firstSeq = engine1.openBarrier()
+        XCTAssertTrue(engine1.awaitBarrier(firstSeq, timeoutMS: 2_000))
 
-        let export = try decodeExport(engine2)
+        let export = try decodeExport(engine1)
         let installEvents = queueEvents(export).filter { ($0["n"] as? String) == "install" }
         XCTAssertEqual(installEvents.count, 1)
 
         // Tick again: still exactly one.
-        let secondSeq = engine2.openBarrier()
-        XCTAssertTrue(engine2.awaitBarrier(secondSeq, timeoutMS: 2_000))
-        let export2 = try decodeExport(engine2)
+        let secondSeq = engine1.openBarrier()
+        XCTAssertTrue(engine1.awaitBarrier(secondSeq, timeoutMS: 2_000))
+        let export2 = try decodeExport(engine1)
         let installEvents2 = queueEvents(export2).filter { ($0["n"] as? String) == "install" }
         XCTAssertEqual(installEvents2.count, 1)
     }
