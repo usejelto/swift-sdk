@@ -303,6 +303,14 @@ enum WireGate {
     static func validateTrackProps(_ props: [String: WireValue]?, eventName: String, log: DebugLog) -> Bool {
         guard let props, !props.isEmpty else { return true }
 
+        if let origin = props["install_origin"] {
+            guard eventName == "install", case .string(let value) = origin,
+                  Jelto.InstallOrigin(rawValue: value) != nil else {
+                log.log("drop event: install_origin is reserved for install and must be new, existing or unknown")
+                return false
+            }
+        }
+
         if props.count > Wire.maxProps {
             log.log("drop event \(DebugLog.display(eventName)): props has \(props.count) keys, spec/wire-v1.md §3 caps them at \(Wire.maxProps)")
             return false
@@ -369,6 +377,10 @@ enum WireGate {
     static func installProps(_ raw: [String: String], log: DebugLog) -> [String: String] {
         var result: [String: String] = [:]
         for key in raw.keys.sorted(by: Wire.byUTF8Bytes) {
+            guard key != "install_origin" else {
+                log.log("drop install property: supply install_origin through initialization, not heartbeat properties")
+                continue
+            }
             guard Grammar.isPropKey(key) else {
                 log.log("drop install property \(DebugLog.display(key)): spec/wire-v1.md §3 `props` keys are ^[a-z0-9_]{1,32}$")
                 continue

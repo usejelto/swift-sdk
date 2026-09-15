@@ -427,7 +427,8 @@ while let rawLine = readLine(strippingNewline: true) {
             let key = tokens[1]
             let app = tokens.count > 2 ? tokens[2] : nil
             let start = DispatchTime.now().uptimeNanoseconds
-            Jelto.initialize(key: key, app: app)
+            let origin = Jelto.InstallOrigin(rawValue: ProcessInfo.processInfo.environment["JELTO_INSTALL_ORIGIN"] ?? "") ?? .unknown
+            Jelto.initialize(key: key, app: app, installOrigin: origin)
             let elapsedNS = DispatchTime.now().uptimeNanoseconds - start
             let us = Int(elapsedNS / 1_000)
             writeReply(["cmd": "init", "ok": true, "us": us])

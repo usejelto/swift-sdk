@@ -157,12 +157,13 @@ final class EventQueue: @unchecked Sendable {
         return checkpointLocked(next, transitionID: event.id)
     }
 
-    /// Reset drops only old-identity transitions; other queued events keep legacy semantics.
-    func discardTransitions() -> Bool {
+    /// Reset also drops claims so a frozen origin never moves to a new identity.
+    func discardTransitions(includeInstallClaims: Bool = false) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        guard entries.contains(where: { $0.event.name == "app_updated" }) else { return true }
-        return checkpointLocked(entries.filter { $0.event.name != "app_updated" })
+        let discard: (QueuedEvent) -> Bool = { $0.name == "app_updated" || (includeInstallClaims && $0.name == "install") }
+        guard entries.contains(where: { discard($0.event) }) else { return true }
+        return checkpointLocked(entries.filter { !discard($0.event) })
     }
 
     private func checkpointLocked(_ next: [(event: QueuedEvent, lineBytes: Int)], transitionID: String? = nil) -> Bool {

@@ -29,6 +29,24 @@ and property names in Jelto before sending them. See the
 [Swift integration guide](https://jelto.io/docs/sdk/swift) for consent, event
 registration, installation identity, reset and disable behavior.
 
+## Apps with existing users
+
+Supply an optional host classification before changing your app's saved first-launch
+state:
+
+```swift
+Jelto.initialize(key: "YOUR_PRODUCT_ID", app: "desktop", installOrigin: .existing)
+```
+
+Use `.new` only when the host knows this is the app installation's first launch,
+`.existing` when it predates Jelto, or `.unknown` (the default) when unsure. A
+missing onboarding-complete flag alone does not prove a new installation. The SDK
+sends only the category on its install claim, never your saved date or onboarding
+history. The category stays fixed across retries and relaunches; an older claim
+without it stays unknown. `reset()` creates an unknown claim, and `disable()`
+followed by initialization can capture a newly supplied category. Do not put
+`install_origin` in `setProps`; heartbeats never carry it.
+
 ## Development and conformance
 
 From this directory, run `make build` and `make test` (or `swift build` and

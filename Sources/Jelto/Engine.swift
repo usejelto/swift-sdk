@@ -170,7 +170,7 @@ final class Engine: @unchecked Sendable {
     }
 
 
-    func initialize(key: String, app: String?, endpoint: String? = nil) {
+    func initialize(key: String, app: String?, endpoint: String? = nil, installOrigin: Jelto.InstallOrigin = .unknown) {
         lock.lock()
         // Resolve explicit endpoint, then JELTO_ENDPOINT, then the default (wire §1).
         // The environment override must work so conformance traffic stays on the mock endpoint.
@@ -209,13 +209,13 @@ final class Engine: @unchecked Sendable {
 
         if isReArm {
             dispatchQueue.async { [self] in
-                bootstrap(gatedSlug: gatedSlug)
+                bootstrap(gatedSlug: gatedSlug, installOrigin: installOrigin)
                 notify()
             }
         } else {
             // Dispatch bootstrap before the first pump tick on the serial queue.
             dispatchQueue.async { [self] in
-                bootstrap(gatedSlug: gatedSlug)
+                bootstrap(gatedSlug: gatedSlug, installOrigin: installOrigin)
                 tick()
             }
         }
@@ -283,7 +283,7 @@ final class Engine: @unchecked Sendable {
         dispatchQueue.sync { cachedTransportEndpoint }
     }
 
-    private func bootstrap(gatedSlug: String?) {
+    private func bootstrap(gatedSlug: String?, installOrigin: Jelto.InstallOrigin) {
         _ = transport()
 
         _ = store.load()
@@ -302,7 +302,10 @@ final class Engine: @unchecked Sendable {
         let stateAfterInstall = store.update { state in
             if state.installID.isEmpty || state.installID == Identifiers.nilUUID {
                 state.installID = Identifiers.uuidV4()
+                state.installOrigin = installOrigin.rawValue
             }
+            // A legacy identity already owns its claim, even if it has not sent yet.
+            if state.installOrigin == nil { state.installOrigin = "unknown" }
             if !state.installClaimed && state.installDueAt == nil {
                 state.installDueAt = now
             }
@@ -514,13 +517,14 @@ final class Engine: @unchecked Sendable {
         // A queued install is already the retry; never enqueue a second copy.
         if !state.installClaimed, !installEnqueuedThisRun, let dueAt = state.installDueAt, !(now < dueAt),
            !eventQueue.contains(name: "install") {
-            store.update { s in
+            guard store.commit({ s in
                 if s.installFirstTry == nil {
                     s.installFirstTry = now
                 }
-            }
+            }) else { return (now.adding(1_000), false) }
             let event = QueuedEvent(
-                id: Identifiers.uuidV7(at: now), name: "install", t: now, props: nil, isHeartbeat: false, context: eventContext()
+                id: Identifiers.uuidV7(at: now), name: "install", t: now,
+                props: ["install_origin": .string(state.installOrigin ?? "unknown")], isHeartbeat: false, context: eventContext()
             )
             installEnqueuedThisRun = true
             eventQueue.append(event)
@@ -886,13 +890,14 @@ final class Engine: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         guard !disabled, !quit, generation == (lifecycleGeneration, identityGeneration) else { return }
-        guard eventQueue.discardTransitions() else {
+        guard eventQueue.discardTransitions(includeInstallClaims: true) else {
             log.log("reset deferred: app update queue could not be persisted")
             return
         }
         let newID = Identifiers.uuidV4()
         guard store.commit({ state in
             state.installID = newID
+            state.installOrigin = "unknown"
             state.installClaimed = false
             state.installDueAt = now
             state.installFirstTry = nil

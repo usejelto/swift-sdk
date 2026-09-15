@@ -3,14 +3,19 @@ import Foundation
 // The public API forwards to a shared, lazily constructed Engine. Construction
 // creates no files or sockets. Conformance-only accessors use SPI.
 public enum Jelto {
+    /// Host knowledge of the app installation before its first Jelto initialization.
+    public enum InstallOrigin: String, Sendable {
+        case new, existing, unknown
+    }
+
     private static let engine = Engine()
 
     /// `endpoint` is for a customer on a first-party subdomain, who serves
     /// `/v1/e` on their own hostname. Omit it and the SDK sends to `spec/wire-v1.md` §1's
     /// production host, which is what every ordinary integration wants: a REQUIRED endpoint is
     /// one more thing every integration can get wrong, and getting it wrong is silent.
-    public static func initialize(key: String, app: String? = nil, endpoint: String? = nil) {
-        engine.initialize(key: key, app: app, endpoint: endpoint)
+    public static func initialize(key: String, app: String? = nil, endpoint: String? = nil, installOrigin: InstallOrigin = .unknown) {
+        engine.initialize(key: key, app: app, endpoint: endpoint, installOrigin: installOrigin)
     }
 
     public static func setProps(_ props: [String: String]) {

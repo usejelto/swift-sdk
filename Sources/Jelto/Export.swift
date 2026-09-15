@@ -40,6 +40,7 @@ struct StateExport: Encodable {
     private enum CodingKeys: String, CodingKey {
         case lastAppVersion = "last_app_version"
         case installID = "install_id"
+        case installOrigin = "install_origin"
         case lastHeartbeatDay = "last_heartbeat_day"
         case installClaimed = "install_claimed"
         case installDueAt = "install_due_at"
@@ -58,6 +59,7 @@ struct StateExport: Encodable {
 
         try c.encodeIfPresent(state.lastAppVersion, forKey: .lastAppVersion)
         try c.encode(state.installID, forKey: .installID) // always; "" when unset
+        try c.encodeIfPresent(state.installOrigin, forKey: .installOrigin)
         if let day = state.lastHeartbeatDay {
             try c.encode(day, forKey: .lastHeartbeatDay) // already a decimal string
         }

@@ -41,6 +41,7 @@ struct PersistedState: Sendable {
     var lastAppVersion: String? = nil
     var pendingUpdate: AppUpdateIntent? = nil
     var installID: String = ""
+    var installOrigin: String? = nil
     var lastHeartbeatDay: String? = nil
     var installClaimed: Bool = false
     var installDueAt: Instant? = nil
@@ -65,6 +66,7 @@ private struct StoredState: Codable {
     var lastAppVersion: String?
     var pendingUpdate: AppUpdateIntent?
     var installID: String
+    var installOrigin: String?
     var lastHeartbeatDay: String?
     var installClaimed: Bool
     var installDueAt: String?
@@ -80,6 +82,7 @@ private struct StoredState: Codable {
         lastAppVersion = state.lastAppVersion
         pendingUpdate = state.pendingUpdate
         installID = state.installID
+        installOrigin = state.installOrigin
         lastHeartbeatDay = state.lastHeartbeatDay
         installClaimed = state.installClaimed
         installDueAt = state.installDueAt?.description
@@ -99,6 +102,7 @@ private struct StoredState: Codable {
         s.lastAppVersion = lastAppVersion
         s.pendingUpdate = pendingUpdate
         s.installID = installID
+        s.installOrigin = installOrigin.map { Jelto.InstallOrigin(rawValue: $0)?.rawValue ?? "unknown" }
         s.lastHeartbeatDay = lastHeartbeatDay
         s.installClaimed = installClaimed
         s.installDueAt = installDueAt.flatMap { Instant(decimal: $0) }
@@ -114,7 +118,7 @@ private struct StoredState: Codable {
 
     private enum CodingKeys: String, CodingKey {
         case lastAppVersion, pendingUpdate
-        case installID, lastHeartbeatDay, installClaimed, installDueAt, installFirstTry
+        case installID, installOrigin, lastHeartbeatDay, installClaimed, installDueAt, installFirstTry
         case installProps, backoffStepMS, backoffNextAt, stopUntil, stopProbeDue
         case consecutiveRefusals
     }
@@ -128,6 +132,7 @@ private struct StoredState: Codable {
         lastAppVersion = try c.decodeIfPresent(String.self, forKey: .lastAppVersion)
         pendingUpdate = try c.decodeIfPresent(AppUpdateIntent.self, forKey: .pendingUpdate)
         installID = try c.decodeIfPresent(String.self, forKey: .installID) ?? empty.installID
+        installOrigin = try c.decodeIfPresent(String.self, forKey: .installOrigin)
         lastHeartbeatDay = try c.decodeIfPresent(String.self, forKey: .lastHeartbeatDay)
         installClaimed = try c.decodeIfPresent(Bool.self, forKey: .installClaimed) ?? empty.installClaimed
         installDueAt = try c.decodeIfPresent(String.self, forKey: .installDueAt)
@@ -147,6 +152,7 @@ private struct StoredState: Codable {
         try c.encodeIfPresent(lastAppVersion, forKey: .lastAppVersion)
         try c.encodeIfPresent(pendingUpdate, forKey: .pendingUpdate)
         try c.encode(installID, forKey: .installID)
+        try c.encodeIfPresent(installOrigin, forKey: .installOrigin)
         try c.encodeIfPresent(lastHeartbeatDay, forKey: .lastHeartbeatDay)
         try c.encode(installClaimed, forKey: .installClaimed)
         try c.encodeIfPresent(installDueAt, forKey: .installDueAt)
