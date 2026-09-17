@@ -59,12 +59,31 @@ final class ReadyLatchTests: XCTestCase {
         return result == KERN_SUCCESS ? info.pth_curpri : -1
     }
 
+    /// Whether the kernel schedules a thread that asked for user-initiated at utility's 20
+    /// anyway: the process carries a utility QoS clamp (`taskpolicy -c utility`, and the way
+    /// this suite runs on a GitHub-hosted macOS runner). Under it every class collapses to 20,
+    /// so the propagation below is unobservable rather than broken. The request itself must
+    /// have taken; a thread that never got its class is a harness fault the test fails on.
+    private static func utilityClampInForce() -> Bool {
+        let clamped = Cell(false)
+        let sampled = DispatchSemaphore(value: 0)
+        let probe = Thread {
+            clamped.value = qos_class_self() == QOS_CLASS_USER_INITIATED && currentPriority() <= 20
+            sampled.signal()
+        }
+        probe.qualityOfService = .userInitiated
+        probe.start()
+        return sampled.wait(timeout: .now() + 5) == .success && clamped.value
+    }
+
     /// A user-initiated caller parked on bootstrap raises the utility worker to its own class
     /// for as long as it is parked. The worker samples its own effective priority from inside
     /// bootstrap, before the latch opens, until it sees the waiter's or gives up: on the old
     /// `readyCondition.wait()` it saw 20 for the whole three seconds — the inversion Xcode's
     /// Thread Performance Checker reported.
-    func testCallerParkedOnBootstrapLendsItsPriorityToTheWorker() {
+    func testCallerParkedOnBootstrapLendsItsPriorityToTheWorker() throws {
+        try XCTSkipIf(ReadyLatchTests.utilityClampInForce(),
+            "the process is clamped to utility: no thread can outrank the worker here")
         let waiterPriority = Cell<Int32>(-1)
         let workerPeak = Cell<Int32>(-1)
         let workerSawWaiter = Cell(false)
