@@ -1,7 +1,8 @@
 import Foundation
 
 // All SDK work runs on one serial utility queue. Synchronous API fields use lock;
-// readyCondition wakes bootstrap waiters and remains open for later callers until re-armed.
+// readyCondition holds the bootstrap latch, read on every call and re-armed by `initialize`;
+// a caller that finds it closed parks on the queue itself (`waitReady`), not on the condition.
 // idleAckCondition wakes barrier waiters; idleWant has a separate lock.
 // Jelto.swift owns the shared instance and public/SPI accessors.
 final class Engine: @unchecked Sendable {
@@ -31,6 +32,7 @@ final class Engine: @unchecked Sendable {
     private let postOverride: (@Sendable (Data) -> Outcome)?
     private let beforeBatchSelection: (@Sendable () -> Void)?
     private let beforeIdlePendingClear: (@Sendable () -> Void)?
+    private let beforeReady: (@Sendable () -> Void)? // runs on dispatchQueue, inside bootstrap, before the latch opens
     // Only dispatchQueue touches observation/recovery state.
     private var versionObserved = false
     private var observationTime: Instant?
@@ -76,11 +78,13 @@ final class Engine: @unchecked Sendable {
 
     // Internal injection points keep lifecycle interleavings and HTTP outcomes deterministic in tests.
     init(beforeMutation: (@Sendable (Mutation) -> Void)? = nil, post: (@Sendable (Data) -> Outcome)? = nil,
-         beforeBatchSelection: (@Sendable () -> Void)? = nil, beforeIdlePendingClear: (@Sendable () -> Void)? = nil) {
+         beforeBatchSelection: (@Sendable () -> Void)? = nil, beforeIdlePendingClear: (@Sendable () -> Void)? = nil,
+         beforeReady: (@Sendable () -> Void)? = nil) {
         self.beforeMutation = beforeMutation
         self.postOverride = post
         self.beforeBatchSelection = beforeBatchSelection
         self.beforeIdlePendingClear = beforeIdlePendingClear
+        self.beforeReady = beforeReady
         let env = ProcessInfo.processInfo.environment
 
         let debugEnabled = env["JELTO_DEBUG"] == "1"
@@ -133,7 +137,32 @@ final class Engine: @unchecked Sendable {
         readyCondition.unlock()
     }
 
+    /// Parks the caller until bootstrap has run. The park is a `sync` no-op block on
+    /// `dispatchQueue`, not a wait on `readyCondition`, because of what each carries: a
+    /// condition wait tells the kernel nothing about who it is waiting FOR, so a
+    /// user-interactive caller (an app's main thread calling `setProps` right after
+    /// `initialize`) sat behind utility-class file IO at utility priority — the inversion
+    /// Xcode's Thread Performance Checker reports at that `wait()`. A `sync` waiter on a serial
+    /// queue is the one wait libdispatch propagates QoS through: every block ahead of it,
+    /// bootstrap included, runs at the waiter's class until the waiter is released.
+    ///
+    /// What makes the block ahead of the waiter BE bootstrap: `initialize` enqueues it under
+    /// `lock` before releasing the `started`/`disabled` it publishes, so a caller admitted under
+    /// that lock always has bootstrap ahead of its own block; and the first tick is enqueued
+    /// from bootstrap's tail rather than run inline, so a parked caller sits between the two
+    /// and never waits on a tick's POST. The latch stays the truth: the fast path reads it, and
+    /// the loop after the `sync` is the guard that a caller never proceeds un-bootstrapped
+    /// should that ordering ever break — it does not spin today.
     private func waitReady() {
+        readyCondition.lock()
+        let ready = isReady
+        readyCondition.unlock()
+        if ready { return }
+
+        // Nothing on the queue calls the synchronous API; from there this would be a self-wait.
+        dispatchPrecondition(condition: .notOnQueue(dispatchQueue))
+        dispatchQueue.sync {}
+
         readyCondition.lock()
         while !isReady {
             readyCondition.wait()
@@ -202,23 +231,30 @@ final class Engine: @unchecked Sendable {
             disabled = false
         }
         self.key = key
-        lock.unlock()
 
         // Validate the slug synchronously and capture its immutable value for bootstrap.
         let gatedSlug = WireGate.appSlug(app, log: log)
 
+        // Enqueued BEFORE `lock` is released, the way `disable()` queues its wipe: a caller that
+        // reads `started && !disabled` under this lock must find bootstrap already ahead of it
+        // on the serial queue, which is the ordering `waitReady()` parks on. Enqueued after the
+        // unlock, a caller could be admitted in between and park on an empty queue.
         if isReArm {
             dispatchQueue.async { [self] in
                 bootstrap(gatedSlug: gatedSlug, installOrigin: installOrigin)
                 notify()
             }
         } else {
-            // Dispatch bootstrap before the first pump tick on the serial queue.
+            // Bootstrap, then the first pump tick — as two blocks, not one: a caller parked in
+            // `waitReady()` during bootstrap sits between them, and the first tick can POST (a
+            // stop probe that fell due while the app was closed), which no caller of the
+            // synchronous API may be made to wait for.
             dispatchQueue.async { [self] in
                 bootstrap(gatedSlug: gatedSlug, installOrigin: installOrigin)
-                tick()
+                dispatchQueue.async { [self] in tick() }
             }
         }
+        lock.unlock()
     }
 
     /// Resolve explicit endpoint, then environment, then the default (spec/wire-v1.md §1).
@@ -337,6 +373,7 @@ final class Engine: @unchecked Sendable {
             eventQueue.append(heartbeat)
         }
 
+        beforeReady?()
         markReady()
     }
 
