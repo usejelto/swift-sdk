@@ -14,38 +14,54 @@ local development, add this checkout as a local package instead; `make package`
 writes a source archive to `artifacts/`.
 
 Initialize once after your app decides analytics may start, then report a
-registered action:
+custom action:
 
 ```swift
 import Jelto
 
-Jelto.initialize(key: "YOUR_PRODUCT_ID", app: "desktop")
+Jelto.initialize(key: "YOUR_PRODUCT_ID", app: "desktop", installOrigin: .new)
 Jelto.setProps(["license": "trial"])
 Jelto.track("export_finished", props: ["format": "pdf"])
 ```
 
-Replace the product ID and app slug with your registered values. Register event
-and property names in Jelto before sending them. See the
-[Swift integration guide](https://jelto.io/docs/sdk/swift) for consent, event
-registration, installation identity, reset and disable behavior.
+`installOrigin: .new` is for an app that had no users before Jelto; otherwise see
+the [existing-app guide](https://jelto.io/docs/start/existing-app).
+
+Replace `YOUR_PRODUCT_ID` with your product ID (for example `prd_8f3kq2m9x1`) and
+`desktop` with your app slug registered under **Settings → Installation → Apps**.
+Custom event names and property keys are discovered when Jelto first receives
+them; they do not need to be registered first. See the
+[Swift integration guide](https://jelto.io/docs/sdk/swift) for consent, custom
+events, installation identity, reset and disable behavior.
 
 ## Apps with existing users
 
-Supply an optional host classification before changing your app's saved first-launch
-state:
+Retention, onboarding and license-conversion reports count only installations
+marked `.new`. In an app that already has users, derive the value for each
+installation from state your app saved before Jelto, and read that state before
+this launch updates it:
 
 ```swift
-Jelto.initialize(key: "YOUR_PRODUCT_ID", app: "desktop", installOrigin: .existing)
+// origin is .existing, .new or .unknown, chosen from your saved state as below.
+Jelto.initialize(key: "YOUR_PRODUCT_ID", app: "desktop", installOrigin: origin)
 ```
 
-Use `.new` only when the host knows this is the app installation's first launch,
-`.existing` when it predates Jelto, or `.unknown` (the default) when unsure. A
-missing onboarding-complete flag alone does not prove a new installation. The SDK
+Use `.existing` when saved state shows the installation predates Jelto, `.new`
+only when the host knows this is the app installation's first launch, and
+`.unknown` when unsure. Omitting the argument also sends unknown. Never hardcode
+one value for every installation of an existing app. A missing
+onboarding-complete flag alone does not prove a new installation. The SDK
 sends only the category on its install claim, never your saved date or onboarding
 history. The category stays fixed across retries and relaunches; an older claim
 without it stays unknown. `reset()` creates an unknown claim, and `disable()`
 followed by initialization can capture a newly supplied category. Do not put
 `install_origin` in `setProps`; heartbeats never carry it.
+
+## Verify it works
+
+1. Set `Jelto.debug = true` before `initialize` (or add `JELTO_DEBUG=1` to the scheme's environment); payloads print to stderr on lines starting with `jelto:`. Turn it off before distributing a build.
+2. Run the app, let it start analytics, and keep it open for about 10 seconds.
+3. In the Jelto dashboard, open **Settings → Installation → Apps**; your app shows **Receiving app activity**.
 
 ## Development and conformance
 
