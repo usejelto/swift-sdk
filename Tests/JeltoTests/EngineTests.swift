@@ -119,6 +119,36 @@ final class EngineTests: XCTestCase {
         XCTAssertEqual(export3["last_heartbeat_day"] as? String, String(dayTwoMS / 86_400_000))
     }
 
+    // The same rule inside one process (C3b): no second `initialize`, only the clock moving.
+
+    func testRunningEngineHeartbeatsOnDayRollover() throws {
+        let dir = freshDirectory()
+        defer { removeQuietly(dir) }
+        let dayOneMS: Int64 = 1_788_134_400_000 // an exact UTC-midnight boundary.
+
+        let engine = makeEngine(stateDir: dir, nowMS: dayOneMS)
+        engine.initialize(key: "prd_conform001", app: nil)
+        XCTAssertEqual(heartbeatCount(try decodeExport(engine)), 1)
+
+        // Later the same day: a tick runs, and finds no new day. The closed port keeps every
+        // event queued, so the export counts what was enqueued, sent or not.
+        engine.clock.advance(by: 3_000)
+        XCTAssertTrue(engine.awaitBarrier(engine.openBarrier(), timeoutMS: 10_000))
+        XCTAssertEqual(heartbeatCount(try decodeExport(engine)), 1)
+
+        // Across midnight in the same process: the running engine sends the new day's heartbeat.
+        engine.clock.advance(by: 86_400_000)
+        XCTAssertTrue(engine.awaitBarrier(engine.openBarrier(), timeoutMS: 10_000))
+        let export = try decodeExport(engine)
+        XCTAssertEqual(heartbeatCount(export), 2)
+        XCTAssertEqual(export["last_heartbeat_day"] as? String, String(dayOneMS / 86_400_000 + 1))
+
+        // And only one: a further tick on day two adds nothing.
+        engine.clock.advance(by: 3_000)
+        XCTAssertTrue(engine.awaitBarrier(engine.openBarrier(), timeoutMS: 10_000))
+        XCTAssertEqual(heartbeatCount(try decodeExport(engine)), 2)
+    }
+
     // The install deadline persists across a relaunch (C4c — a deadline, not a countdown).
 
     func testInstallDeadlinePersists() throws {

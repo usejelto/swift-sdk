@@ -60,6 +60,11 @@ final class Engine: @unchecked Sendable {
     // Only dispatchQueue accesses the wake timer; lock guards timerGeneration.
     private var wakeTimer: DispatchSourceTimer?
 
+    // The UTC-midnight wake (RFC-0001 §8.2 item 3, C3b) and the instant, in milliseconds, it is
+    // armed for. Only dispatchQueue accesses either.
+    private var dayTimer: DispatchSourceTimer?
+    private var dayTimerTargetMS: Int64?
+
     // The ready latch (§2.1). Reset on every fresh start and every re-arm.
 
     private let readyCondition = NSCondition()
@@ -465,6 +470,7 @@ final class Engine: @unchecked Sendable {
             return
         }
         scheduleWake(at: next, from: now)
+        scheduleDayWake(from: now)
     }
 
     /// Clear the wake mark before tick observes the barrier. A concurrent notify must
@@ -514,6 +520,42 @@ final class Engine: @unchecked Sendable {
             firedTimer(generation: generation)
         }
         wakeTimer = timer
+        timer.resume()
+    }
+
+    /// RFC-0001 §8.2 item 3, C3b: wake for the next UTC midnight on the WALL clock. The wake
+    /// timer above counts `DispatchTime`, which stops while the Mac sleeps, so a midnight armed on
+    /// it fires as many hours late as the machine slept, and a Mac asleep from 23:00 to 08:00
+    /// would never see one. A `wallDeadline` keeps counting through sleep and fires on wake once
+    /// the instant has passed. The timer only runs a tick; the day check itself is `step`'s, so a
+    /// fire that finds the same day does nothing but re-arm. Not armed before `init` or after
+    /// `disable()`, where `step` would refuse the tick anyway.
+    private func scheduleDayWake(from now: Instant) {
+        lock.lock()
+        let active = started && !disabled && !quit
+        lock.unlock()
+        guard active, let nowMS = Int64(now.description) else { return }
+
+        let dayMS: Int64 = 86_400_000
+        let today = nowMS >= 0 ? nowMS / dayMS : (nowMS - dayMS + 1) / dayMS // floor, as utcDayIndex
+        let targetMS = (today + 1) * dayMS
+        guard dayTimerTargetMS != targetMS else { return }
+
+        dayTimer?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: dispatchQueue)
+        timer.schedule(wallDeadline: .now() + .milliseconds(Int(targetMS - nowMS)), leeway: .seconds(1))
+        timer.setEventHandler { [self] in
+            // Cleared first: a fire that lands a hair before midnight re-arms for the same
+            // instant from the tick below instead of being taken as already armed.
+            dayTimerTargetMS = nil
+            lock.lock()
+            let shouldQuit = quit
+            lock.unlock()
+            guard !shouldQuit else { return }
+            tick()
+        }
+        dayTimer = timer
+        dayTimerTargetMS = targetMS
         timer.resume()
     }
 
@@ -568,6 +610,25 @@ final class Engine: @unchecked Sendable {
             lock.lock()
             // Queue immediately while preserving the two-second initial flush (C7).
             if initFlushAt == nil { pending = true }
+            lock.unlock()
+            return (nil, true)
+        }
+
+        // RFC-0001 §8.2 item 3, C3b: the day check belongs to the running SDK, not to
+        // `initialize` alone, or an app that outlives a UTC midnight (a login item, a menu-bar
+        // utility) is active only on the days it launched. Gated on the ready latch so it never
+        // races bootstrap's own check into a second heartbeat for one day. Enqueued before the
+        // stop and retry gates, which govern sending, never queueing. An empty day (after
+        // `reset()`) differs from today, so a rotated identity heartbeats too.
+        let today = now.utcDayIndex.description
+        if bootstrapped(), state.lastHeartbeatDay != today {
+            store.update { $0.lastHeartbeatDay = today }
+            let heartbeat = QueuedEvent(
+                id: Identifiers.uuidV7(at: now), name: "heartbeat", t: now, props: nil, isHeartbeat: true, context: eventContext()
+            )
+            eventQueue.append(heartbeat)
+            lock.lock()
+            pending = true
             lock.unlock()
             return (nil, true)
         }
