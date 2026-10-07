@@ -2,7 +2,7 @@
   "name": "swift-release-tools",
   "version": "0.1.1",
   "producer": "contracts",
-  "producer_commit": "c524d00c43aac4723107199ad3413d974e8acaa9",
+  "producer_commit": "fbeaa6be564dbe1587d63bf5260bff365e5e4951",
   "files": {
     "release.py": {
       "source": "release.py",
@@ -10,7 +10,7 @@
     },
     "RELEASING.md": {
       "source": "RELEASING.md",
-      "sha256": "d85964b19b619e1abf6ec26998f4cc83a40fd1701a68a38edeafc11fa5b36ae9"
+      "sha256": "c348913cac0caf527b8fe8674012ab971cad6089b71c8c2796d70511ad727a39"
     }
   }
 }
