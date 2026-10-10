@@ -119,6 +119,56 @@ final class ResponseTests: XCTestCase {
         engine.disable()
     }
 
+    // wire §8 (rev 0.26): `stop.until` is bounded to 30 days past receipt, exercised end to end
+    // through `Engine.applyAccepted` the same way. A far-future `until` is persisted as exactly
+    // `answeredAt + 2 592 000 000 ms`; one at or inside the bound is persisted as given.
+
+    /// Drives one `202 {"stop":…}` answer, received at a clock pinned to 5 000 ms, and returns the
+    /// `stop_until` the engine persisted — read back from disk, not from memory.
+    private func persistedStopUntil(afterStopUntilSeconds until: Int64) throws -> Instant? {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        setenv("JELTO_STATE_DIR", directory.path, 1)
+        setenv("JELTO_NOW", "0", 1)
+        setenv("JELTO_APP_VERSION", "1.0.0", 1)
+        defer {
+            unsetenv("JELTO_STATE_DIR")
+            unsetenv("JELTO_NOW")
+            unsetenv("JELTO_APP_VERSION")
+        }
+        XCTAssertTrue(Store(directory: directory).commit { s in
+            s.installID = Identifiers.uuidV4()
+            s.lastAppVersion = "1.0.0"
+            s.lastHeartbeatDay = "0"
+            s.installClaimed = true
+            s.installDueAt = Instant(-10_000)
+        })
+
+        let body = Data(#"{"stop":{"until":\#(until),"scope":"app"}}"#.utf8)
+        let engine = Engine(post: { _ in
+            Outcome(status: 202, body: body, retryAfter: nil, isNetworkError: false, isRetryable: false)
+        })
+        engine.initialize(key: "prd_conform001", app: nil)
+        _ = engine.exportState()
+        engine.track(name: "x", props: nil)
+        engine.clock.pin(to: Instant(5_000))
+        XCTAssertTrue(engine.awaitBarrier(engine.openBarrier(), timeoutMS: 2_000))
+
+        let stopUntil = Store(directory: directory).load().stopUntil
+        engine.disable()
+        return stopUntil
+    }
+
+    func testStopUntilIsBoundedToThirtyDaysFromReceipt() throws {
+        let bound = Instant(5_000).adding(2_592_000_000)
+        // Far out (10^15 s): honoured as exactly 30 days from receipt.
+        XCTAssertEqual(try persistedStopUntil(afterStopUntilSeconds: 1_000_000_000_000_000), bound)
+        // Exactly at the bound: not "further out", so kept as given.
+        XCTAssertEqual(try persistedStopUntil(afterStopUntilSeconds: 2_592_005), bound)
+        // Near: kept as given.
+        XCTAssertEqual(try persistedStopUntil(afterStopUntilSeconds: 60), Instant(60_000))
+    }
+
     /// Not JSON, all -> `nil`. The truncated object documents the consequence of `Transport`'s
     /// 64 KiB cap on a `huge` body — C10's `garbage` and `huge` arms in one place.
     func testNotJSONAllNil() {

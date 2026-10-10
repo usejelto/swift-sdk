@@ -897,11 +897,20 @@ final class Engine: @unchecked Sendable {
             log.log("stop until \(stop.until.description) is already past (now \(answeredAt.description))")
         }
 
+        // wire §8 (rev 0.26): a client MUST NOT park for more than 30 days past the moment it
+        // received the response. An `until` further out is honoured as exactly 30 days from
+        // receipt and persisted as that; the probe then re-reads a switch that is still on.
+        let bound = answeredAt.adding(2_592_000_000)
+        let until = bound < stop.until ? bound : stop.until
+        if until != stop.until {
+            log.log("stop until \(stop.until.description) is more than 30 days out; bounded to \(bound.description) (spec/wire-v1.md §8)")
+        }
+
         store.update { s in
-            s.stopUntil = stop.until
+            s.stopUntil = until
             s.stopProbeDue = true
         }
-        log.log("kill switch: no request until \(stop.until.description) ms, scope \(stop.scope) (spec/wire-v1.md §8)")
+        log.log("kill switch: no request until \(until.description) ms, scope \(stop.scope) (spec/wire-v1.md §8)")
     }
 
     private func finalRefusal(_ outcome: Outcome) {
