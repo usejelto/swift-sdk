@@ -100,7 +100,10 @@ final class StoreTests: XCTestCase {
     }
 
 
-    func testWipeEmptiesTheDirectory() {
+    /// `wipe()` removes the SDK's own three files and nothing else: a `JELTO_STATE_DIR` that
+    /// points at a directory the host also uses must not lose the host's own files, or the
+    /// directory, to `disable()`.
+    func testWipeRemovesOnlyTheSDKsOwnFiles() {
         let dir = freshDirectory()
         defer { removeQuietly(dir) }
 
@@ -111,11 +114,20 @@ final class StoreTests: XCTestCase {
 
         try! Data("queue".utf8).write(to: dir.appendingPathComponent("queue.jsonl"))
         try! Data("tmp".utf8).write(to: dir.appendingPathComponent("queue.jsonl.tmp"))
+        // Not the SDK's: a file and a subdirectory with a file inside, planted by the host.
+        try! Data("theirs".utf8).write(to: dir.appendingPathComponent("notes.txt"))
+        let subdirectory = dir.appendingPathComponent("theirs")
+        try! FileManager.default.createDirectory(at: subdirectory, withIntermediateDirectories: false)
+        try! Data("nested".utf8).write(to: subdirectory.appendingPathComponent("nested.txt"))
 
         store.wipe()
 
-        let contents = try! FileManager.default.contentsOfDirectory(atPath: dir.path)
-        XCTAssertTrue(contents.isEmpty)
+        for name in ["state.plist", "queue.jsonl", "queue.jsonl.tmp"] {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent(name).path), name)
+        }
+        let contents = try! FileManager.default.contentsOfDirectory(atPath: dir.path).sorted()
+        XCTAssertEqual(contents, ["notes.txt", "theirs"])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: subdirectory.appendingPathComponent("nested.txt").path))
         XCTAssertTrue(statesEqual(store.get(), PersistedState()))
     }
 

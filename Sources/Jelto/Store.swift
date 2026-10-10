@@ -182,6 +182,11 @@ final class Store: @unchecked Sendable {
     /// unbounded read.
     private static let maxStateFileBytes = 256 * 1_024 // 256 KiB
 
+    /// Every file the SDK writes into its state directory, by name: `state.plist` (this file),
+    /// `queue.jsonl` (`Engine` derives it from the same directory) and `queue.jsonl.tmp`
+    /// (`EventQueue`'s compaction temp file). `wipe()` removes these and nothing else.
+    private static let ownedFileNames = ["state.plist", "queue.jsonl", "queue.jsonl.tmp"]
+
     /// Records the directory and the derived `state.plist` URL. Touches the filesystem not at
     /// all (C5).
     init(directory: URL) {
@@ -261,12 +266,13 @@ final class Store: @unchecked Sendable {
     }
 
     /// C18's `state_dir_empty` check is a real `os.ReadDir` of the
-    /// directory, so resetting the in-memory fields and removing the two known file names is not
-    /// enough: every remaining entry in the directory is removed too (the queue file, a stray
-    /// compaction temp file, anything else the SDK put there). The directory itself is left in
-    /// place — an existing-but-empty directory and a never-created one both pass
-    /// `checkStateDirEmpty`. Only entries of the SDK's own state directory are ever removed, and
-    /// this never recurses above it.
+    /// directory, so resetting the in-memory fields is not enough: the SDK's own files are
+    /// removed too — `state.plist`, the queue file and its compaction temp file, by name
+    /// (`ownedFileNames`). Nothing else is ever removed, and never the directory itself: the
+    /// directory is not the SDK's to clear — a `JELTO_STATE_DIR` pointing somewhere the host
+    /// also uses, or a bundle identifier another app shares, must not cost the host its own
+    /// files on `disable()` — and an existing-but-empty directory and a never-created one both
+    /// pass `checkStateDirEmpty`.
     ///
     /// Ordering contract with the queue: `EventQueue` holds an open append file
     /// handle. The engine MUST call `queue.delete()` (which closes that handle) BEFORE
@@ -276,15 +282,8 @@ final class Store: @unchecked Sendable {
         defer { lock.unlock() }
 
         state = PersistedState()
-        try? FileManager.default.removeItem(at: stateFileURL)
-
-        if let entries = try? FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: nil
-        ) {
-            for entry in entries {
-                try? FileManager.default.removeItem(at: entry)
-            }
+        for name in Store.ownedFileNames {
+            try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
         }
     }
 }
