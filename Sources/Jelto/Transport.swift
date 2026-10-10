@@ -223,6 +223,16 @@ private final class TransportDelegate: NSObject, URLSessionDataDelegate, @unchec
         lock.unlock()
     }
 
+    /// A `3xx` is final, like every answer that is not a network error, `429` or `503` (wire
+    /// §2a), and is never followed: following it would re-POST the envelope to whatever
+    /// `Location` the server — or anything interposed on the path — chose. Answering `nil` makes
+    /// URLSession deliver the redirect itself as this task's response, so `didCompleteWithError`
+    /// below reports its status like any other final answer.
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+        completionHandler(nil)
+    }
+
     /// If `truncated` is set and an HTTP response exists, report that response's status and the
     /// truncated body, ignoring the cancellation error. Otherwise report the status, or
     /// `status = 0` + `isNetworkError = true` when there is no HTTP response — which, since a
