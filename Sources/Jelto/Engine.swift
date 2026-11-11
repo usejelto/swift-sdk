@@ -60,7 +60,7 @@ final class Engine: @unchecked Sendable {
     // Only dispatchQueue accesses the wake timer; lock guards timerGeneration.
     private var wakeTimer: DispatchSourceTimer?
 
-    // The UTC-midnight wake (RFC-0001 §8.2 item 3, C3b) and the instant, in milliseconds, it is
+    // The UTC-midnight wake (the daily heartbeat, C3b) and the instant, in milliseconds, it is
     // armed for. Only dispatchQueue accesses either.
     private var dayTimer: DispatchSourceTimer?
     private var dayTimerTargetMS: Int64?
@@ -535,7 +535,7 @@ final class Engine: @unchecked Sendable {
         timer.resume()
     }
 
-    /// RFC-0001 §8.2 item 3, C3b: wake for the next UTC midnight on the WALL clock. The wake
+    /// The daily heartbeat, C3b: wake for the next UTC midnight on the WALL clock. The wake
     /// timer above counts `DispatchTime`, which stops while the Mac sleeps, so a midnight armed on
     /// it fires as many hours late as the machine slept, and a Mac asleep from 23:00 to 08:00
     /// would never see one. A `wallDeadline` keeps counting through sleep and fires on wake once
@@ -630,7 +630,7 @@ final class Engine: @unchecked Sendable {
             return (nil, true)
         }
 
-        // RFC-0001 §8.2 item 3, C3b: the day check belongs to the running SDK, not to
+        // The daily heartbeat, C3b: the day check belongs to the running SDK, not to
         // `initialize` alone, or an app that outlives a UTC midnight (a login item, a menu-bar
         // utility) is active only on the days it launched. Gated on the ready latch so it never
         // races bootstrap's own check into a second heartbeat for one day. Enqueued before the

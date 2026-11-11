@@ -1,4 +1,4 @@
-# Governing contract: spec/ci.md §7 in the source monorepo; see RELEASING.md.
+# How a release runs, and what it publishes: see RELEASING.md.
 name: swift release
 on:
   push:
