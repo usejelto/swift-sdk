@@ -39,4 +39,4 @@ conformance-twice: build
 package:
 	python3 package.py
 
-security: secrets
+security: secrets workflow-audit
