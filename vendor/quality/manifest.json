@@ -1,0 +1,32 @@
+{
+  "name": "swift-quality-tools",
+  "version": "0.1.0",
+  "producer": "contracts",
+  "producer_commit": "d473fe6c0f76d77b0a81af261bcc540c1e890920",
+  "files": {
+    "githooks/commit-msg": {
+      "source": "tools/quality/githooks/commit-msg",
+      "sha256": "1c38c48a69dc970092b51cf65104688ef625ad44f13cc0403e68314599762cd0"
+    },
+    "githooks/pre-commit": {
+      "source": "tools/quality/githooks/pre-commit",
+      "sha256": "8ec930d286f06a9e676aecb18e1f3363cdd2590d4fb72cb7702f5e84b4de797b"
+    },
+    "install_tools.py": {
+      "source": "tools/quality/install_tools.py",
+      "sha256": "c0be64725fc6e7e4fb05e16f4d5c054ca506d54ec610eb6b95e1c79fec8ae4a4"
+    },
+    "quality.mk": {
+      "source": "tools/quality/quality.mk",
+      "sha256": "82bf5357d3b6d43dd9130060d8314d95fa8c522b4e9118095bcf7afc9929a549"
+    },
+    "tools.json": {
+      "source": "tools/quality/tools.json",
+      "sha256": "d810823994e03903f3ef7cd61ed084d06f31ee9dfd9b3ce8496ff4b7c9694dbb"
+    },
+    "zizmor.yml": {
+      "source": "tools/quality/zizmor.yml",
+      "sha256": "2b5098b85d7385882b5f5cc4bc8e0bbb76d7d0db03de41df3ac5a900ff26ebc6"
+    }
+  }
+}
