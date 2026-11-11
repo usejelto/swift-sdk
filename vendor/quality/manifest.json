@@ -1,8 +1,8 @@
 {
   "name": "swift-quality-tools",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "producer": "contracts",
-  "producer_commit": "d473fe6c0f76d77b0a81af261bcc540c1e890920",
+  "producer_commit": "cf072f4e5b89df80efea3ede535f95dfad5122db",
   "files": {
     "githooks/commit-msg": {
       "source": "tools/quality/githooks/commit-msg",
@@ -16,9 +16,13 @@
       "source": "tools/quality/install_tools.py",
       "sha256": "c0be64725fc6e7e4fb05e16f4d5c054ca506d54ec610eb6b95e1c79fec8ae4a4"
     },
+    "lint_baseline.py": {
+      "source": "tools/quality/lint_baseline.py",
+      "sha256": "255a7ef6c6d9c95cf78c8c264c5bd9d7b033dc251ec8011f696d0889af5f419d"
+    },
     "quality.mk": {
       "source": "tools/quality/quality.mk",
-      "sha256": "82bf5357d3b6d43dd9130060d8314d95fa8c522b4e9118095bcf7afc9929a549"
+      "sha256": "b997c31af9a1a368fd61ca1b35fc23f8ed77c259a1f8d37b92d3f9b254c307c7"
     },
     "tools.json": {
       "source": "tools/quality/tools.json",
