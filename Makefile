@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := test
-.PHONY: build test conformance conformance-run conformance-twice package security
+.PHONY: build test conformance conformance-run conformance-twice package security check
 
 # The shared quality targets (hooks, tools, secrets, osv, workflow-audit, sast)
 # arrive from the contracts repository as a checksummed snapshot; `make inputs`
@@ -38,5 +38,10 @@ conformance-twice: build
 
 package:
 	python3 package.py
+
+# The whole gate: what to run before a pull request, and what CI runs.
+# Conformance twice runs beside it in CI on release or on request. The package
+# has no dependencies and so no lockfile, which leaves OSV-Scanner nothing to read.
+check: test build package security
 
 security: secrets workflow-audit

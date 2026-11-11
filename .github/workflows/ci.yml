@@ -43,6 +43,8 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+          # make check scans the whole Git history for secrets.
+          fetch-depth: 0
       - uses: actions/setup-python@v7
         with:
           python-version: '3.14'
@@ -54,8 +56,10 @@ jobs:
         with:
           go-version-file: .contracts/go.mod
           cache: false
-      - name: Component tests and packages
-        run: make test build package
+      # The same command a contributor runs: tests, the package and the
+      # security scans.
+      - name: Checks
+        run: make check
       - name: Conformance twice
         if: inputs.release || inputs.conformance
         # Both passes run concurrently in the Makefile: each runner has its own
