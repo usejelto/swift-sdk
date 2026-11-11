@@ -8,11 +8,16 @@ include vendor/quality/quality.mk
 JELTO_CONTRACTS_DIR ?=
 JELTO_CONTRACTS_VERSION = $(shell python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$(JELTO_CONTRACTS_DIR)/spec/contracts/manifest.json")
 
+# Every compiler warning is an error in this repository's own builds. The flag
+# lives here, not in Package.swift, because unsafeFlags there would stop other
+# packages from depending on this one.
+SWIFT_BUILD_FLAGS = -Xswiftc -warnings-as-errors
+
 build:
-	swift build
+	swift build $(SWIFT_BUILD_FLAGS)
 
 test:
-	swift test
+	swift test $(SWIFT_BUILD_FLAGS)
 
 conformance: build
 	$(MAKE) conformance-run

@@ -69,6 +69,7 @@ overrides the location), and `make tools` installs them all ahead of time.
 
 | Target | Tool | What it checks |
 |---|---|---|
+| `make build`, `make test` | Swift compiler | the package and its tests build with every warning treated as an error |
 | `make secrets` | gitleaks | the whole Git history for credentials |
 | `make workflow-audit` | actionlint, zizmor | workflow syntax, script injection, permissions and pinning |
 
@@ -76,6 +77,8 @@ When a check reports something, fix a real problem in the same change. A
 deliberate exception, or a finding the tool got wrong, is marked at the one
 place it applies, with the reason beside it:
 
+- Swift compiler warnings: none; fix the warning, since Swift has no
+  per-line suppression;
 - gitleaks: a `.gitleaks.toml` allowlist entry naming the one literal and why;
 - zizmor: `# zizmor: ignore[<audit>]` on the line, with the reason above it;
 - OSV-Scanner: an `[[IgnoredVulns]]` entry in `osv-scanner.toml` with a
