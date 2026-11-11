@@ -44,7 +44,7 @@ enum Identifiers {
     }
 
     private static func randomBytes16() -> [UInt8] {
-        var rng = SystemRandomNumberGenerator()
+        var rng = SystemRandomNumberGenerator() // nosemgrep: insecure-random -- the platform's cryptographically secure generator; the UUIDs identify, they are not secrets
         var bytes = [UInt8](repeating: 0, count: 16)
         for i in 0..<16 {
             bytes[i] = UInt8.random(in: 0...255, using: &rng)

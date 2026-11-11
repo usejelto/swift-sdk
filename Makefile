@@ -5,6 +5,11 @@
 # arrive from the contracts repository as a checksummed snapshot; `make inputs`
 # in the backend refreshes it, and nothing edits it here.
 include vendor/quality/quality.mk
+# opengrep community rules: every Swift rule (insecure randomness, sensitive
+# data in UserDefaults, SQLite injection, WebView JavaScript bridges), and the
+# Unicode rule for bidirectional control characters, which covers package.py,
+# JSON and YAML (its language list does not include Swift).
+QUALITY_COMMUNITY_RULES = swift generic/unicode/security
 JELTO_CONTRACTS_DIR ?=
 JELTO_CONTRACTS_VERSION = $(shell python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$(JELTO_CONTRACTS_DIR)/spec/contracts/manifest.json")
 
@@ -64,4 +69,4 @@ check: lint test build package security
 lint:
 	swift format lint --strict --recursive Sources Tests Package.swift
 
-security: secrets workflow-audit
+security: secrets workflow-audit sast

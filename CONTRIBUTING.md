@@ -73,6 +73,7 @@ overrides the location), and `make tools` installs them all ahead of time.
 | `make build`, `make test` | Swift compiler | the package and its tests build with every warning treated as an error |
 | `make secrets` | gitleaks | the whole Git history for credentials |
 | `make workflow-audit` | actionlint, zizmor | workflow syntax, script injection, permissions and pinning |
+| `make sast` | opengrep | the community Swift and Unicode rules, and the project's own rules in `.opengrep/` (each with its test cases beside it) |
 
 When a check reports something, fix a real problem in the same change. A
 deliberate exception, or a finding the tool got wrong, is marked at the one
@@ -82,6 +83,8 @@ place it applies, with the reason beside it:
   statement, with the reason in a comment above that;
 - Swift compiler warnings: none; fix the warning, since Swift has no
   per-line suppression;
+- opengrep: `// nosemgrep: <rule-id> -- <reason>` at the end of the finding's
+  first line (`#` in YAML and the Makefile);
 - gitleaks: a `.gitleaks.toml` allowlist entry naming the one literal and why;
 - zizmor: `# zizmor: ignore[<audit>]` on the line, with the reason above it;
 - OSV-Scanner: an `[[IgnoredVulns]]` entry in `osv-scanner.toml` with a

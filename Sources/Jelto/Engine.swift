@@ -851,7 +851,7 @@ final class Engine: @unchecked Sendable {
 
     private func applyBackoff(answeredAt: Instant, outcome: Outcome) {
         let before = store.get()
-        let jitter = Double.random(in: Backoff.jitterRange)
+        let jitter = Double.random(in: Backoff.jitterRange) // nosemgrep: insecure-random -- retry jitter spreads clients apart and protects no secret
         let result = Backoff.next(
             currentStepMS: before.backoffStepMS, header: outcome.retryAfter, answeredAt: answeredAt, jitter: jitter
         )
