@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := test
-.PHONY: build test conformance conformance-run conformance-twice package
+.PHONY: build test conformance conformance-run conformance-twice package security
 
 # The shared quality targets (hooks, tools, secrets, osv, workflow-audit, sast)
 # arrive from the contracts repository as a checksummed snapshot; `make inputs`
@@ -38,3 +38,5 @@ conformance-twice: build
 
 package:
 	python3 package.py
+
+security: secrets
