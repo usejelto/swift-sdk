@@ -11,6 +11,9 @@ import Foundation
 // through a pipe. Every reply goes through FileHandle.standardOutput.write(_:), an unbuffered
 // write(2). Do not call `print` anywhere in this file.
 func writeReply(_ reply: [String: Any]) {
+    // Every reply is a flat object of strings, booleans and integers, which
+    // JSONSerialization always encodes; a failure is a host bug the runner must see.
+    // swift-format-ignore: NeverUseForceTry
     var data = try! JSONSerialization.data(withJSONObject: reply, options: [.sortedKeys])
     data.append(0x0A) // "\n"
     FileHandle.standardOutput.write(data)
@@ -20,7 +23,7 @@ func writeStderrLine(_ message: String) {
     // The only lines this file itself ever writes to stderr: the three fatal-misconfiguration
     // lines below (each followed by exit(2)) and §5.2's one settle-timeout line. Everything else
     // on stderr is the SDK's own `DebugLog`.
-    let data = (message + "\n").data(using: .utf8)!
+    let data = Data((message + "\n").utf8)
     FileHandle.standardError.write(data)
 }
 

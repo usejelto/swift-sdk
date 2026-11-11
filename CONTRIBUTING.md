@@ -55,7 +55,7 @@ C11 runtime and C19 reproducibility checks separately from the shared harness.
 
 ## Checks and exceptions
 
-`make check` is the whole gate, and the command CI runs on Linux. It runs `test`, `build`, `package` and `security`. `make hooks`
+`make check` is the whole gate, and the command CI runs on Linux. It runs `lint`, `test`, `build`, `package` and `security`. `make hooks`
 enables two Git hooks once per clone: `commit-msg` rejects a subject that is
 not a Conventional Commit, and `pre-commit` runs gitleaks over the staged
 changes. Do not bypass them with `--no-verify`.
@@ -69,6 +69,7 @@ overrides the location), and `make tools` installs them all ahead of time.
 
 | Target | Tool | What it checks |
 |---|---|---|
+| `make lint` | swift-format | layout and rules in `.swift-format` (the Makefile explains each choice); no force unwraps, `try!` or implicitly unwrapped optionals outside tests |
 | `make build`, `make test` | Swift compiler | the package and its tests build with every warning treated as an error |
 | `make secrets` | gitleaks | the whole Git history for credentials |
 | `make workflow-audit` | actionlint, zizmor | workflow syntax, script injection, permissions and pinning |
@@ -77,6 +78,8 @@ When a check reports something, fix a real problem in the same change. A
 deliberate exception, or a finding the tool got wrong, is marked at the one
 place it applies, with the reason beside it:
 
+- swift-format: `// swift-format-ignore: <Rule>` on the line above the one
+  statement, with the reason in a comment above that;
 - Swift compiler warnings: none; fix the warning, since Swift has no
   per-line suppression;
 - gitleaks: a `.gitleaks.toml` allowlist entry naming the one literal and why;

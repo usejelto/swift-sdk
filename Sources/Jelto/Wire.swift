@@ -326,7 +326,7 @@ enum WireGate {
         }
 
         for key in keys {
-            if case .string(let s) = props[key]! {
+            if case .string(let s)? = props[key] {
                 let n = s.unicodeScalars.count
                 if n > Wire.maxPropString {
                     log.log("drop event \(DebugLog.display(eventName)): props value for \(DebugLog.display(key)) is \(n) chars, spec/wire-v1.md §3 caps a string at \(Wire.maxPropString)")
@@ -336,7 +336,7 @@ enum WireGate {
         }
 
         for key in keys {
-            if case .number(let literal) = props[key]!, !Grammar.isJSONNumberLiteral(literal) {
+            if case .number(let literal)? = props[key], !Grammar.isJSONNumberLiteral(literal) {
                 log.log("drop event \(DebugLog.display(eventName)): props value for \(DebugLog.display(key)) is not a JSON number; spec/wire-v1.md §3 allows a string, a number or a boolean")
                 return false
             }
@@ -385,7 +385,7 @@ enum WireGate {
                 log.log("drop install property \(DebugLog.display(key)): spec/wire-v1.md §3 `props` keys are ^[a-z0-9_]{1,32}$")
                 continue
             }
-            let value = raw[key]!
+            guard let value = raw[key] else { continue }
             guard Grammar.isInstallPropValue(value) else {
                 log.log("drop install property \(DebugLog.display(key)): spec/wire-v1.md §4 install-property values are ^[a-z0-9_.-]{1,24}$, not \(DebugLog.display(value))")
                 continue
@@ -487,10 +487,11 @@ private func appendProps(_ props: [String: WireValue], to data: inout Data) {
     data.append(UInt8(ascii: "{"))
     let keys = props.keys.sorted(by: Wire.byUTF8Bytes)
     for (i, key) in keys.enumerated() {
+        guard let value = props[key] else { continue }
         if i > 0 { data.append(UInt8(ascii: ",")) }
         appendJSONString(key, to: &data)
         data.append(UInt8(ascii: ":"))
-        appendJSONValue(props[key]!, to: &data)
+        appendJSONValue(value, to: &data)
     }
     data.append(UInt8(ascii: "}"))
 }

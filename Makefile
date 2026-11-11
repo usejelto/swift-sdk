@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := test
-.PHONY: build test conformance conformance-run conformance-twice package security check
+.PHONY: build test conformance conformance-run conformance-twice package security check lint
 
 # The shared quality targets (hooks, tools, secrets, osv, workflow-audit, sast)
 # arrive from the contracts repository as a checksummed snapshot; `make inputs`
@@ -47,6 +47,21 @@ package:
 # The whole gate: what to run before a pull request, and what CI runs.
 # Conformance twice runs beside it in CI on release or on request. The package
 # has no dependencies and so no lockfile, which leaves OSV-Scanner nothing to read.
-check: test build package security
+check: lint test build package security
+
+# swift-format (it ships with the Swift toolchain) checks both its rules and
+# its layout against .swift-format; `swift format --in-place --recursive Sources
+# Tests Package.swift` applies the layout. The JSON file cannot hold comments,
+# so its choices are explained here. Layout settings match the existing code:
+# four-space indentation, lines up to 200 columns, up to two blank lines
+# between declarations, one space before an end-of-line comment, and #if
+# bodies not indented. Two default rules are off because the code uses those
+# forms on purpose: DoNotUseSemicolons (short statements share a line in case
+# tables and one-line accessors) and NoBlockComments (inline /* x */ names
+# beside hexadecimal scalar values). NeverForceUnwrap, NeverUseForceTry and
+# NeverUseImplicitlyUnwrappedOptionals are on; swift-format itself exempts
+# files that import XCTest, so they apply to Sources only.
+lint:
+	swift format lint --strict --recursive Sources Tests Package.swift
 
 security: secrets workflow-audit
