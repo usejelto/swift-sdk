@@ -1,5 +1,6 @@
 import Network
 import XCTest
+
 @testable import Jelto
 
 /// A loopback HTTP listener for one test: answers every request it has fully read with the bytes
@@ -70,8 +71,9 @@ private final class LoopbackServer: @unchecked Sendable {
                 self.lock.lock()
                 self.requestLines.append(requestLine)
                 self.lock.unlock()
-                connection.send(content: self.response(self.port), contentContext: .finalMessage, isComplete: true,
-                                completion: .contentProcessed { _ in connection.cancel() })
+                connection.send(
+                    content: self.response(self.port), contentContext: .finalMessage, isComplete: true,
+                    completion: .contentProcessed { _ in connection.cancel() })
                 return
             }
             if isComplete || error != nil {
@@ -86,13 +88,14 @@ private final class LoopbackServer: @unchecked Sendable {
     private static func requestLineOfCompleteRequest(in buffer: Data) -> String? {
         guard let headerEnd = buffer.range(of: Data("\r\n\r\n".utf8)) else { return nil }
         let lines = String(decoding: buffer[..<headerEnd.lowerBound], as: UTF8.self).components(separatedBy: "\r\n")
-        let contentLength = lines.dropFirst().compactMap { line -> Int? in
-            let parts = line.split(separator: ":", maxSplits: 1)
-            guard parts.count == 2, parts[0].trimmingCharacters(in: .whitespaces).lowercased() == "content-length" else {
-                return nil
-            }
-            return Int(parts[1].trimmingCharacters(in: .whitespaces))
-        }.first ?? 0
+        let contentLength =
+            lines.dropFirst().compactMap { line -> Int? in
+                let parts = line.split(separator: ":", maxSplits: 1)
+                guard parts.count == 2, parts[0].trimmingCharacters(in: .whitespaces).lowercased() == "content-length" else {
+                    return nil
+                }
+                return Int(parts[1].trimmingCharacters(in: .whitespaces))
+            }.first ?? 0
         guard buffer.count >= headerEnd.upperBound + contentLength else { return nil }
         return lines.first
     }

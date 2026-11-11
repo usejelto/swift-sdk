@@ -1,4 +1,5 @@
 import XCTest
+
 @_spi(Conformance) @testable import Jelto
 
 final class EventQueueTests: XCTestCase {
@@ -24,7 +25,8 @@ final class EventQueueTests: XCTestCase {
         let sentIDs = Set(queue.head(100).map(\.id))
         // While POST is blocked, the caller appends enough events to evict its
         // entire batch and put an unsent transition at the new queue head.
-        let update = event("app_updated", ms: 2_000,
+        let update = event(
+            "app_updated", ms: 2_000,
             props: ["from_version": .string("A"), "to_version": .string("B")])
         queue.append(update)
         for index in 0..<999 { queue.append(event("new", ms: Int64(2_001 + index))) }
@@ -40,7 +42,8 @@ final class EventQueueTests: XCTestCase {
         let fileURL = freshFileURL()
         defer { removeQuietly(fileURL) }
         let queue = EventQueue(fileURL: fileURL)
-        let update = event("app_updated", ms: 2_000,
+        let update = event(
+            "app_updated", ms: 2_000,
             props: ["from_version": .string("A"), "to_version": .string("B")])
         XCTAssertTrue(queue.persistTransition(update))
         XCTAssertTrue(queue.discardTransitions())
@@ -56,9 +59,11 @@ final class EventQueueTests: XCTestCase {
         let fileURL = freshFileURL()
         defer { removeQuietly(fileURL) }
         let queue = EventQueue(fileURL: fileURL)
-        let first = event("app_updated", ms: 2_000,
+        let first = event(
+            "app_updated", ms: 2_000,
             props: ["from_version": .string("A"), "to_version": .string("B")])
-        let next = event("app_updated", ms: 3_000,
+        let next = event(
+            "app_updated", ms: 3_000,
             props: ["from_version": .string("B"), "to_version": .string("C")])
         XCTAssertTrue(queue.persistTransition(first))
         try FileManager.default.removeItem(at: fileURL)

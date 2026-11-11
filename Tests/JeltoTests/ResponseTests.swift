@@ -1,4 +1,5 @@
 import XCTest
+
 @_spi(Conformance) @testable import Jelto
 
 final class ResponseTests: XCTestCase {
@@ -95,13 +96,14 @@ final class ResponseTests: XCTestCase {
             unsetenv("JELTO_NOW")
             unsetenv("JELTO_APP_VERSION")
         }
-        XCTAssertTrue(Store(directory: directory).commit { s in
-            s.installID = Identifiers.uuidV4()
-            s.lastAppVersion = "1.0.0"
-            s.lastHeartbeatDay = "0"
-            s.installClaimed = true
-            s.installDueAt = Instant(-10_000)
-        })
+        XCTAssertTrue(
+            Store(directory: directory).commit { s in
+                s.installID = Identifiers.uuidV4()
+                s.lastAppVersion = "1.0.0"
+                s.lastHeartbeatDay = "0"
+                s.installClaimed = true
+                s.installDueAt = Instant(-10_000)
+            })
 
         let body = Data(#"{"stop":{"until":1,"scope":"web-embedded"}}"#.utf8)
         let engine = Engine(post: { _ in
@@ -136,13 +138,14 @@ final class ResponseTests: XCTestCase {
             unsetenv("JELTO_NOW")
             unsetenv("JELTO_APP_VERSION")
         }
-        XCTAssertTrue(Store(directory: directory).commit { s in
-            s.installID = Identifiers.uuidV4()
-            s.lastAppVersion = "1.0.0"
-            s.lastHeartbeatDay = "0"
-            s.installClaimed = true
-            s.installDueAt = Instant(-10_000)
-        })
+        XCTAssertTrue(
+            Store(directory: directory).commit { s in
+                s.installID = Identifiers.uuidV4()
+                s.lastAppVersion = "1.0.0"
+                s.lastHeartbeatDay = "0"
+                s.installClaimed = true
+                s.installDueAt = Instant(-10_000)
+            })
 
         let body = Data(#"{"stop":{"until":\#(until),"scope":"app"}}"#.utf8)
         let engine = Engine(post: { _ in

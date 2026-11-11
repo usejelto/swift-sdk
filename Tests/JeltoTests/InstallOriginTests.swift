@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+
 @_spi(Conformance) @testable import Jelto
 
 final class InstallOriginTests: XCTestCase {
@@ -46,7 +47,8 @@ final class InstallOriginTests: XCTestCase {
             let claim = try XCTUnwrap(events(directory).first { $0.name == "install" })
             XCTAssertEqual(claim.props, ["install_origin": .string(origin.rawValue)])
             let context = try XCTUnwrap(claim.context)
-            let encoded = Envelope.event(claim, platform: context.platform, clientVersion: context.clientVersion,
+            let encoded = Envelope.event(
+                claim, platform: context.platform, clientVersion: context.clientVersion,
                 installID: sdk.installID(), installProps: ["license": "paid"])
             let json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
             XCTAssertEqual(json["props"] as? [String: String], ["install_origin": origin.rawValue])
@@ -81,14 +83,16 @@ final class InstallOriginTests: XCTestCase {
             defer { try? FileManager.default.removeItem(at: directory) }
             let id = Identifiers.uuidV4()
             let store = Store(directory: directory)
-            XCTAssertTrue(store.commit {
-                $0.installID = id
-                $0.installClaimed = claimed
-                $0.installDueAt = Instant(now - 10_000)
-                $0.lastHeartbeatDay = String(now / 86_400_000)
-            })
+            XCTAssertTrue(
+                store.commit {
+                    $0.installID = id
+                    $0.installClaimed = claimed
+                    $0.installDueAt = Instant(now - 10_000)
+                    $0.lastHeartbeatDay = String(now / 86_400_000)
+                })
             let queue = EventQueue(fileURL: directory.appendingPathComponent("queue.jsonl"))
-            let legacy = QueuedEvent(id: Identifiers.uuidV7(at: Instant(now - 10_000)), name: "install",
+            let legacy = QueuedEvent(
+                id: Identifiers.uuidV7(at: Instant(now - 10_000)), name: "install",
                 t: Instant(now - 10_000), props: nil, isHeartbeat: false)
             if !claimed { queue.append(legacy) }
             let sdk = engine(directory, origin: .new)
@@ -130,11 +134,12 @@ final class InstallOriginTests: XCTestCase {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let id = Identifiers.uuidV4()
-        XCTAssertTrue(Store(directory: directory).commit {
-            $0.installID = id
-            $0.installOrigin = "not-an-origin"
-            $0.installDueAt = Instant(now)
-        })
+        XCTAssertTrue(
+            Store(directory: directory).commit {
+                $0.installID = id
+                $0.installOrigin = "not-an-origin"
+                $0.installDueAt = Instant(now)
+            })
         let sdk = engine(directory, origin: .new)
         XCTAssertEqual(sdk.installID(), id)
         XCTAssertEqual(Store(directory: directory).load().installOrigin, "unknown")

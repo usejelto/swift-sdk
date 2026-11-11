@@ -2,10 +2,9 @@
 // retain raw number literals instead of passing through JSONSerialization.
 // Top-level host state is MainActor-isolated; SDK work remains in Sources/Jelto.
 
-@_spi(Conformance) import Jelto
 import Dispatch
 import Foundation
-
+@_spi(Conformance) import Jelto
 
 // Swift's `print` is block-buffered when stdout is a pipe, and the runner drives the host
 // through a pipe. Every reply goes through FileHandle.standardOutput.write(_:), an unbuffered
@@ -274,7 +273,8 @@ func scanProps(_ text: String) -> [String: WireValue]? {
         let start = i
         while i < n {
             let b = bytes[i]
-            let isNumberChar = (b >= UInt8(ascii: "0") && b <= UInt8(ascii: "9"))
+            let isNumberChar =
+                (b >= UInt8(ascii: "0") && b <= UInt8(ascii: "9"))
                 || b == UInt8(ascii: "-") || b == UInt8(ascii: "+") || b == UInt8(ascii: ".")
                 || b == UInt8(ascii: "e") || b == UInt8(ascii: "E")
             guard isNumberChar else { break }
@@ -517,10 +517,11 @@ while let rawLine = readLine(strippingNewline: true) {
         exit(0)
 
     default:
-        writeReply(errorReply(
-            cmd,
-            "unknown command; spec/sdk-conformance.md §3 has init, track, onboarding, setprops, installid, dumpstate, reset, disable, sleep, exit"
-        ))
+        writeReply(
+            errorReply(
+                cmd,
+                "unknown command; spec/sdk-conformance.md §3 has init, track, onboarding, setprops, installid, dumpstate, reset, disable, sleep, exit"
+            ))
     }
 }
 

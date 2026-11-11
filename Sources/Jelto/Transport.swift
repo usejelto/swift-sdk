@@ -32,7 +32,8 @@ final class Transport: @unchecked Sendable {
     /// omitted otherwise (mockd's precedence rule takes the header only "when present and
     /// non-empty").
     convenience init(endpoint: URL, mockMode: String?) {
-        self.init(endpoint: endpoint, mockMode: mockMode, requestTimeout: 5, resourceTimeout: 5,
+        self.init(
+            endpoint: endpoint, mockMode: mockMode, requestTimeout: 5, resourceTimeout: 5,
             semaphoreTimeout: 6, onSendTimeout: nil)
     }
 
@@ -45,9 +46,11 @@ final class Transport: @unchecked Sendable {
     /// `post`'s OWN semaphore guard rather than URLSession's much more commonly hit
     /// `timeoutIntervalForRequest`/`-Resource` (both of which reliably deliver a callback and so
     /// never touch this code path at all).
-    init(endpoint: URL, mockMode: String?, requestTimeout: TimeInterval, resourceTimeout: TimeInterval,
-         semaphoreTimeout: TimeInterval, delegateQueue: OperationQueue? = nil,
-         onSendTimeout: (@Sendable (URLSessionTask) -> Void)? = nil) {
+    init(
+        endpoint: URL, mockMode: String?, requestTimeout: TimeInterval, resourceTimeout: TimeInterval,
+        semaphoreTimeout: TimeInterval, delegateQueue: OperationQueue? = nil,
+        onSendTimeout: (@Sendable (URLSessionTask) -> Void)? = nil
+    ) {
         self.endpoint = endpoint
         self.mockMode = mockMode
         self.requestTimeout = requestTimeout
@@ -228,8 +231,10 @@ private final class TransportDelegate: NSObject, URLSessionDataDelegate, @unchec
     /// `Location` the server — or anything interposed on the path — chose. Answering `nil` makes
     /// URLSession deliver the redirect itself as this task's response, so `didCompleteWithError`
     /// below reports its status like any other final answer.
-    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
-                    newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+    func urlSession(
+        _ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void
+    ) {
         completionHandler(nil)
     }
 

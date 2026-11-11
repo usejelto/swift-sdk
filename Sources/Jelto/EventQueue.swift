@@ -394,10 +394,11 @@ final class EventQueue: @unchecked Sendable {
             return
         }
         guard let line = try? decoder.decode(QueueEventLine.self, from: bytes),
-              let instant = Instant(decimal: line.t),
-              Grammar.isEventName(line.n),
-              EventQueue.propsAreWellFormed(line.p),
-              EventQueue.contextIsWellFormed(line.context) else {
+            let instant = Instant(decimal: line.t),
+            Grammar.isEventName(line.n),
+            EventQueue.propsAreWellFormed(line.p),
+            EventQueue.contextIsWellFormed(line.context)
+        else {
             return
         }
         let event = QueuedEvent(id: line.id, name: line.n, t: instant, props: line.p, isHeartbeat: line.hb, context: line.context)
@@ -437,7 +438,8 @@ final class EventQueue: @unchecked Sendable {
     /// A crash mid-compaction leaves the old file, which still replays to the same live set,
     /// because the swap is atomic (`FileManager.replaceItemAt`).
     private func considerCompactionLocked() {
-        let shouldCompact = (deadBytes >= Self.compactionFloorBytes && deadBytes >= liveBytes)
+        let shouldCompact =
+            (deadBytes >= Self.compactionFloorBytes && deadBytes >= liveBytes)
             || (entries.isEmpty && deadBytes > 0)
         guard shouldCompact else { return }
         compactLocked()

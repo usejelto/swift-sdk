@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+
 @_spi(Conformance) @testable import Jelto
 
 private final class RecordedPosts: @unchecked Sendable {
@@ -11,7 +12,8 @@ private final class RecordedPosts: @unchecked Sendable {
         lock.lock()
         bodies.append(body)
         lock.unlock()
-        return Outcome(status: status, body: Data("{}".utf8), retryAfter: nil,
+        return Outcome(
+            status: status, body: Data("{}".utf8), retryAfter: nil,
             isNetworkError: false, isRetryable: status == 503)
     }
     func snapshot() -> [Data] {
@@ -57,13 +59,14 @@ final class LifecycleRegressionTests: XCTestCase {
         setenv("JELTO_ENDPOINT", "http://127.0.0.1:1/v1/e", 1)
         if pinned { setenv("JELTO_NOW", "0", 1) } else { unsetenv("JELTO_NOW") }
         let now = pinned ? Int64(0) : Int64(Date().timeIntervalSince1970 * 1000)
-        XCTAssertTrue(Store(directory: directory).commit {
-            $0.installID = Identifiers.uuidV4()
-            $0.lastAppVersion = "1.0.0"
-            $0.lastHeartbeatDay = String(now / 86_400_000)
-            $0.installClaimed = claimed
-            $0.installDueAt = Instant(claimed ? now - 10_000 : 10_000)
-        })
+        XCTAssertTrue(
+            Store(directory: directory).commit {
+                $0.installID = Identifiers.uuidV4()
+                $0.lastAppVersion = "1.0.0"
+                $0.lastHeartbeatDay = String(now / 86_400_000)
+                $0.installClaimed = claimed
+                $0.installDueAt = Instant(claimed ? now - 10_000 : 10_000)
+            })
         return directory
     }
 

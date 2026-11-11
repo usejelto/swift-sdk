@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import XCTest
+
 @_spi(Conformance) @testable import Jelto
 
 /// A lock-guarded cell for the values two threads hand each other in these tests.
@@ -82,24 +83,27 @@ final class ReadyLatchTests: XCTestCase {
     /// `readyCondition.wait()` it saw 20 for the whole three seconds — the inversion Xcode's
     /// Thread Performance Checker reported.
     func testCallerParkedOnBootstrapLendsItsPriorityToTheWorker() throws {
-        try XCTSkipIf(ReadyLatchTests.utilityClampInForce(),
+        try XCTSkipIf(
+            ReadyLatchTests.utilityClampInForce(),
             "the process is clamped to utility: no thread can outrank the worker here")
         let waiterPriority = Cell<Int32>(-1)
         let workerPeak = Cell<Int32>(-1)
         let workerSawWaiter = Cell(false)
         let waiterSetOut = DispatchSemaphore(value: 0)
-        let engine = Engine(post: { _ in ReadyLatchTests.accepted }, beforeReady: {
-            // Sample only once the waiter has set out; it parks within microseconds of that.
-            workerSawWaiter.value = waiterSetOut.wait(timeout: .now() + 5) == .success
-            let target = waiterPriority.value
-            let deadline = Date().addingTimeInterval(3)
-            repeat {
-                let now = ReadyLatchTests.currentPriority()
-                workerPeak.value = max(workerPeak.value, now)
-                if now >= target { break }
-                usleep(2_000)
-            } while Date() < deadline
-        })
+        let engine = Engine(
+            post: { _ in ReadyLatchTests.accepted },
+            beforeReady: {
+                // Sample only once the waiter has set out; it parks within microseconds of that.
+                workerSawWaiter.value = waiterSetOut.wait(timeout: .now() + 5) == .success
+                let target = waiterPriority.value
+                let deadline = Date().addingTimeInterval(3)
+                repeat {
+                    let now = ReadyLatchTests.currentPriority()
+                    workerPeak.value = max(workerPeak.value, now)
+                    if now >= target { break }
+                    usleep(2_000)
+                } while Date() < deadline
+            })
         engine.initialize(key: "prd_conform001", app: "desktop")
 
         let finished = DispatchSemaphore(value: 0)
@@ -115,7 +119,8 @@ final class ReadyLatchTests: XCTestCase {
 
         XCTAssertTrue(workerSawWaiter.value)
         XCTAssertGreaterThan(waiterPriority.value, 20, "the waiter must outrank the utility worker for this to mean anything")
-        XCTAssertGreaterThanOrEqual(workerPeak.value, waiterPriority.value,
+        XCTAssertGreaterThanOrEqual(
+            workerPeak.value, waiterPriority.value,
             "the worker never reached the waiter's priority (peak \(workerPeak.value)): the park does not propagate QoS")
         XCTAssertFalse(engine.installID().isEmpty)
         XCTAssertTrue(engine.awaitBarrier(engine.openBarrier(), timeoutMS: 2_000))
@@ -127,22 +132,25 @@ final class ReadyLatchTests: XCTestCase {
     /// bootstrap's tail as its own block, so the caller's `sync` block lands between the two —
     /// folded back into one block, the caller would wait out the whole round trip.
     func testCallerParkedOnBootstrapDoesNotWaitForTheFirstTicksPost() {
-        XCTAssertTrue(Store(directory: directory).commit {
-            $0.installID = Identifiers.uuidV4()
-            $0.installClaimed = true
-            $0.lastAppVersion = "1.0.0"
-            $0.stopProbeDue = true
-        })
+        XCTAssertTrue(
+            Store(directory: directory).commit {
+                $0.installID = Identifiers.uuidV4()
+                $0.installClaimed = true
+                $0.lastAppVersion = "1.0.0"
+                $0.stopProbeDue = true
+            })
         let holdBootstrap = DispatchSemaphore(value: 0)
         let postEntered = DispatchSemaphore(value: 0)
         let releasePost = DispatchSemaphore(value: 0)
-        let engine = Engine(post: { _ in
-            postEntered.signal()
-            _ = releasePost.wait(timeout: .now() + 10)
-            return ReadyLatchTests.accepted
-        }, beforeReady: {
-            _ = holdBootstrap.wait(timeout: .now() + 10)
-        })
+        let engine = Engine(
+            post: { _ in
+                postEntered.signal()
+                _ = releasePost.wait(timeout: .now() + 10)
+                return ReadyLatchTests.accepted
+            },
+            beforeReady: {
+                _ = holdBootstrap.wait(timeout: .now() + 10)
+            })
         engine.initialize(key: "prd_conform001", app: "desktop")
 
         let finished = DispatchSemaphore(value: 0)

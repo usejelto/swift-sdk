@@ -1,4 +1,5 @@
 import XCTest
+
 @_spi(Conformance) @testable import Jelto
 
 /// The conformance runner always injects JELTO_ENDPOINT, so unit tests must cover
@@ -44,18 +45,22 @@ final class EndpointTests: XCTestCase {
 
     /// §1's precedence, in full: an explicit endpoint beats both.
     func testTheArgumentBeatsTheEnvironment() throws {
-        let resolved = try XCTUnwrap(Engine.resolveEndpoint(argument: "https://a.example.com/v1/e",
-                                              envValue: "http://127.0.0.1:8080/v1/e", log: log))
+        let resolved = try XCTUnwrap(
+            Engine.resolveEndpoint(
+                argument: "https://a.example.com/v1/e",
+                envValue: "http://127.0.0.1:8080/v1/e", log: log))
         XCTAssertEqual(resolved.absoluteString, "https://a.example.com/v1/e")
     }
 
     /// An empty value is an absent one at every level — the rule §5.1 `f` and §5.2 `a` state for
     /// themselves, applied here so a shell exporting `JELTO_ENDPOINT=` does not silence an app.
     func testAnEmptyValueIsAnAbsentValue() throws {
-        XCTAssertEqual(try XCTUnwrap(Engine.resolveEndpoint(argument: "", envValue: "", log: log)).absoluteString,
-                       "https://in.jelto.io/v1/e")
-        XCTAssertEqual(try XCTUnwrap(Engine.resolveEndpoint(argument: "", envValue: "https://e.example.com/v1/e", log: log)).absoluteString,
-                       "https://e.example.com/v1/e")
+        XCTAssertEqual(
+            try XCTUnwrap(Engine.resolveEndpoint(argument: "", envValue: "", log: log)).absoluteString,
+            "https://in.jelto.io/v1/e")
+        XCTAssertEqual(
+            try XCTUnwrap(Engine.resolveEndpoint(argument: "", envValue: "https://e.example.com/v1/e", log: log)).absoluteString,
+            "https://e.example.com/v1/e")
     }
 
     /// The scheme comparison is case-insensitive (spec/wire-v1.md §1), unlike every other

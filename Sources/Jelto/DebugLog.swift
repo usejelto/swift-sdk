@@ -1,6 +1,7 @@
 // Debug output is strictly opt-in: disabled logging must leave stderr byte-empty (C10).
 
 import Foundation
+
 #if canImport(Darwin)
 import Darwin
 #endif

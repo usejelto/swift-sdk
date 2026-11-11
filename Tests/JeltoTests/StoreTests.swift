@@ -1,4 +1,5 @@
 import XCTest
+
 @_spi(Conformance) @testable import Jelto
 
 final class StoreTests: XCTestCase {

@@ -106,8 +106,9 @@ enum Grammar {
     static func isProductKey(_ s: String) -> Bool {
         let scalars = Array(s.unicodeScalars)
         guard scalars.count == 14,
-              scalars[0].value == 0x70, scalars[1].value == 0x72,
-              scalars[2].value == 0x64, scalars[3].value == 0x5F else { return false }
+            scalars[0].value == 0x70, scalars[1].value == 0x72,
+            scalars[2].value == 0x64, scalars[3].value == 0x5F
+        else { return false }
         for i in 4..<14 {
             let v = scalars[i].value
             guard isLowerAlpha(v) || isDigit(v) else { return false }
@@ -249,7 +250,8 @@ struct Platform: Sendable, Codable {
     static func observedAppVersion(_ argument: String?) -> String? {
         let raw = argument ?? (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String)
         guard let raw, raw.unicodeScalars.count <= 32,
-              raw.unicodeScalars.contains(where: { !$0.properties.isWhitespace }) else { return nil }
+            raw.unicodeScalars.contains(where: { !$0.properties.isWhitespace })
+        else { return nil }
         return raw
     }
 
@@ -305,7 +307,8 @@ enum WireGate {
 
         if let origin = props["install_origin"] {
             guard eventName == "install", case .string(let value) = origin,
-                  Jelto.InstallOrigin(rawValue: value) != nil else {
+                Jelto.InstallOrigin(rawValue: value) != nil
+            else {
                 log.log("drop event: install_origin is reserved for install and must be new, existing or unknown")
                 return false
             }
@@ -560,7 +563,8 @@ enum Envelope {
         // send time — `e.props` is ignored for a heartbeat. Otherwise `e.props`, and
         // `installProps` is ignored. Emitted only when the chosen map is non-empty: an empty map
         // produces no `props` key at all, never `{}`.
-        let chosenProps: [String: WireValue] = e.isHeartbeat
+        let chosenProps: [String: WireValue] =
+            e.isHeartbeat
             ? installProps.mapValues { .string($0) }
             : (e.props ?? [:])
         if !chosenProps.isEmpty {

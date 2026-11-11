@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+
 @_spi(Conformance) @testable import Jelto
 
 final class AppUpdateTests: XCTestCase {
@@ -24,13 +25,14 @@ final class AppUpdateTests: XCTestCase {
     private func seed(_ dir: URL, version: String? = nil) -> String {
         let id = Identifiers.uuidV4()
         let store = Store(directory: dir)
-        XCTAssertTrue(store.commit {
-            $0.installID = id
-            $0.installClaimed = true
-            $0.lastHeartbeatDay = String(now / 86_400_000)
-            $0.lastAppVersion = version
-            $0.installProps = ["license": "paid"]
-        })
+        XCTAssertTrue(
+            store.commit {
+                $0.installID = id
+                $0.installClaimed = true
+                $0.lastHeartbeatDay = String(now / 86_400_000)
+                $0.lastAppVersion = version
+                $0.installProps = ["license": "paid"]
+            })
         return id
     }
 
@@ -76,7 +78,8 @@ final class AppUpdateTests: XCTestCase {
         let queue = events(dir)
         XCTAssertEqual(queue.map(\.name), ["app_updated", "app_updated", "app_updated"])
         XCTAssertEqual(Set(queue.map(\.id)).count, 3)
-        XCTAssertEqual(queue.map { $0.props?["to_version"] },
+        XCTAssertEqual(
+            queue.map { $0.props?["to_version"] },
             [.string("Release A"), .string("Release B+2"), .string("Release A")])
         XCTAssertTrue(Store(directory: dir).load().installClaimed)
         XCTAssertEqual(Store(directory: dir).load().lastHeartbeatDay, String(now / 86_400_000))
@@ -144,7 +147,8 @@ final class AppUpdateTests: XCTestCase {
         XCTAssertEqual(recovered.map { $0.context?.platform.appVersion }, ["B", "C"])
         XCTAssertNil(Store(directory: dir).load().pendingUpdate)
         let later = Platform(appVersion: "Z", os: "windows", osVersion: "changed", arch: "x86", slug: "changed")
-        let data = Envelope.event(try XCTUnwrap(recovered.first), platform: later,
+        let data = Envelope.event(
+            try XCTUnwrap(recovered.first), platform: later,
             clientVersion: "swift/9", installID: Identifiers.uuidV4(), installProps: [:])
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         XCTAssertEqual(body["av"] as? String, "B")
@@ -204,8 +208,10 @@ final class AppUpdateTests: XCTestCase {
         let queue = EventQueue(fileURL: queuePath)
         XCTAssertTrue(queue.persistTransition(try XCTUnwrap(intent.event)))
         for _ in 0..<2_500 {
-            queue.append(QueuedEvent(id: Identifiers.uuidV4(), name: "custom", t: Instant(now),
-                props: nil, isHeartbeat: false))
+            queue.append(
+                QueuedEvent(
+                    id: Identifiers.uuidV4(), name: "custom", t: Instant(now),
+                    props: nil, isHeartbeat: false))
         }
         let retainedIDs = queue.head(1_000).map(\.id)
         XCTAssertFalse(retainedIDs.contains(intent.id))
@@ -233,8 +239,10 @@ final class AppUpdateTests: XCTestCase {
         let queue = EventQueue(fileURL: queuePath)
         XCTAssertTrue(queue.persistTransition(try XCTUnwrap(intent.event)))
         for _ in 0..<1_000 {
-            queue.append(QueuedEvent(id: Identifiers.uuidV4(), name: "custom", t: Instant(now),
-                props: nil, isHeartbeat: false))
+            queue.append(
+                QueuedEvent(
+                    id: Identifiers.uuidV4(), name: "custom", t: Instant(now),
+                    props: nil, isHeartbeat: false))
         }
         let retainedIDs = queue.head(1_000).map(\.id)
         // The preceding SDK format has the update line and its cap acknowledgement,

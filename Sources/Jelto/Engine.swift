@@ -82,9 +82,11 @@ final class Engine: @unchecked Sendable {
     // and nothing below calls `load`, `update` or `append`.
 
     // Internal injection points keep lifecycle interleavings and HTTP outcomes deterministic in tests.
-    init(beforeMutation: (@Sendable (Mutation) -> Void)? = nil, post: (@Sendable (Data) -> Outcome)? = nil,
-         beforeBatchSelection: (@Sendable () -> Void)? = nil, beforeIdlePendingClear: (@Sendable () -> Void)? = nil,
-         beforeReady: (@Sendable () -> Void)? = nil) {
+    init(
+        beforeMutation: (@Sendable (Mutation) -> Void)? = nil, post: (@Sendable (Data) -> Outcome)? = nil,
+        beforeBatchSelection: (@Sendable () -> Void)? = nil, beforeIdlePendingClear: (@Sendable () -> Void)? = nil,
+        beforeReady: (@Sendable () -> Void)? = nil
+    ) {
         self.beforeMutation = beforeMutation
         self.postOverride = post
         self.beforeBatchSelection = beforeBatchSelection
@@ -109,7 +111,8 @@ final class Engine: @unchecked Sendable {
         if let stateDir = env["JELTO_STATE_DIR"], !stateDir.isEmpty {
             directory = URL(fileURLWithPath: stateDir)
         } else {
-            let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            let base =
+                FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
                 ?? FileManager.default.temporaryDirectory
             let bundleID = Bundle.main.bundleIdentifier ?? "jelto"
             directory = base.appendingPathComponent(bundleID).appendingPathComponent("jelto")
@@ -199,7 +202,8 @@ final class Engine: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         guard !disabled, !quit, generation.lifecycle == lifecycleGeneration,
-              allowIdentityChange || generation.identity == identityGeneration else { return nil }
+            allowIdentityChange || generation.identity == identityGeneration
+        else { return nil }
         return generation
     }
 
@@ -292,9 +296,10 @@ final class Engine: @unchecked Sendable {
     /// client posts to.
     private static func validatedEndpointURL(_ s: String) -> URL? {
         guard let url = URL(string: s),
-              let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
-              let host = url.host, !host.isEmpty,
-              url.user == nil, url.password == nil else { return nil }
+            let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
+            let host = url.host, !host.isEmpty,
+            url.user == nil, url.password == nil
+        else { return nil }
         return url
     }
 
@@ -389,13 +394,15 @@ final class Engine: @unchecked Sendable {
         guard !versionObserved else { return true }
         if let intent = store.get().pendingUpdate {
             guard let event = intent.event, eventQueue.persistTransition(event),
-                  store.commit({ $0.pendingUpdate = nil }) else {
+                store.commit({ $0.pendingUpdate = nil })
+            else {
                 log.log("app update persistence unavailable; delivery deferred")
                 return false
             }
         }
         guard let current = Platform.observedAppVersion(appVersionOverride),
-              let context = eventContext(freezeIdentity: true) else {
+            let context = eventContext(freezeIdentity: true)
+        else {
             versionObserved = true
             return true
         }
@@ -410,17 +417,21 @@ final class Engine: @unchecked Sendable {
             return committed
         }
         let now = observationTime ?? clock.now()
-        let intent = AppUpdateIntent(id: Identifiers.uuidV7(at: now), timestamp: now.description,
+        let intent = AppUpdateIntent(
+            id: Identifiers.uuidV7(at: now), timestamp: now.description,
             fromVersion: prior, toVersion: current, context: context)
-        guard store.commit({
-            $0.lastAppVersion = current
-            $0.pendingUpdate = intent
-        }) else {
+        guard
+            store.commit({
+                $0.lastAppVersion = current
+                $0.pendingUpdate = intent
+            })
+        else {
             log.log("app update baseline not committed; delivery deferred")
             return false
         }
         guard let event = intent.event, eventQueue.persistTransition(event),
-              store.commit({ $0.pendingUpdate = nil }) else { return false }
+            store.commit({ $0.pendingUpdate = nil })
+        else { return false }
         versionObserved = true
         return true
     }
@@ -433,7 +444,8 @@ final class Engine: @unchecked Sendable {
 
     private func eventContextLocked(freezeIdentity: Bool = false) -> EventContext? {
         guard let platform else { return nil }
-        return EventContext(platform: platform, clientVersion: clientVersion,
+        return EventContext(
+            platform: platform, clientVersion: clientVersion,
             installID: freezeIdentity ? installIDValue : nil)
     }
 
@@ -587,7 +599,8 @@ final class Engine: @unchecked Sendable {
         let state = store.get()
 
         if !state.installClaimed, let firstTry = state.installFirstTry,
-           !(now < firstTry.adding(2_592_000_000)) {
+            !(now < firstTry.adding(2_592_000_000))
+        {
             store.update { $0.installClaimed = true }
             log.log("install claimed after 30 days of attempts without a 202 (spec/sdk-conformance.md C4b)")
             return (nil, true)
@@ -595,12 +608,15 @@ final class Engine: @unchecked Sendable {
 
         // A queued install is already the retry; never enqueue a second copy.
         if !state.installClaimed, !installEnqueuedThisRun, let dueAt = state.installDueAt, !(now < dueAt),
-           !eventQueue.contains(name: "install") {
-            guard store.commit({ s in
-                if s.installFirstTry == nil {
-                    s.installFirstTry = now
-                }
-            }) else { return (now.adding(1_000), false) }
+            !eventQueue.contains(name: "install")
+        {
+            guard
+                store.commit({ s in
+                    if s.installFirstTry == nil {
+                        s.installFirstTry = now
+                    }
+                })
+            else { return (now.adding(1_000), false) }
             let event = QueuedEvent(
                 id: Identifiers.uuidV7(at: now), name: "install", t: now,
                 props: ["install_origin": .string(state.installOrigin ?? "unknown")], isHeartbeat: false, context: eventContext()
@@ -1002,16 +1018,18 @@ final class Engine: @unchecked Sendable {
             return
         }
         let newID = Identifiers.uuidV4()
-        guard store.commit({ state in
-            state.installID = newID
-            state.installOrigin = "unknown"
-            state.installClaimed = false
-            state.installDueAt = now
-            state.installFirstTry = nil
-            state.lastHeartbeatDay = nil
-            state.lastAppVersion = Platform.observedAppVersion(appVersionOverride)
-            state.pendingUpdate = nil
-        }) else { return }
+        guard
+            store.commit({ state in
+                state.installID = newID
+                state.installOrigin = "unknown"
+                state.installClaimed = false
+                state.installDueAt = now
+                state.installFirstTry = nil
+                state.lastHeartbeatDay = nil
+                state.lastAppVersion = Platform.observedAppVersion(appVersionOverride)
+                state.pendingUpdate = nil
+            })
+        else { return }
         versionObserved = true
         installEnqueuedThisRun = eventQueue.contains(name: "install")
         identityGeneration += 1

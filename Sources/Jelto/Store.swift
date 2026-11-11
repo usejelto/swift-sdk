@@ -31,7 +31,8 @@ struct AppUpdateIntent: Sendable, Codable {
 
     var event: QueuedEvent? {
         guard let instant = Instant(decimal: timestamp) else { return nil }
-        return QueuedEvent(id: id, name: "app_updated", t: instant,
+        return QueuedEvent(
+            id: id, name: "app_updated", t: instant,
             props: ["from_version": .string(fromVersion), "to_version": .string(toVersion)],
             isHeartbeat: false, context: context)
     }
@@ -204,8 +205,9 @@ final class Store: @unchecked Sendable {
         let attributes = try? FileManager.default.attributesOfItem(atPath: stateFileURL.path)
         let size = (attributes?[.size] as? Int) ?? 0
         guard size <= Store.maxStateFileBytes,
-              let data = try? Data(contentsOf: stateFileURL),
-              let stored = try? PropertyListDecoder().decode(StoredState.self, from: data) else {
+            let data = try? Data(contentsOf: stateFileURL),
+            let stored = try? PropertyListDecoder().decode(StoredState.self, from: data)
+        else {
             state = PersistedState()
             return state
         }
