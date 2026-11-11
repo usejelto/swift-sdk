@@ -1,5 +1,10 @@
 .DEFAULT_GOAL := test
 .PHONY: build test conformance conformance-run conformance-twice package
+
+# The shared quality targets (hooks, tools, secrets, osv, workflow-audit, sast)
+# arrive from the contracts repository as a checksummed snapshot; `make inputs`
+# in the backend refreshes it, and nothing edits it here.
+include vendor/quality/quality.mk
 JELTO_CONTRACTS_DIR ?=
 JELTO_CONTRACTS_VERSION = $(shell python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$(JELTO_CONTRACTS_DIR)/spec/contracts/manifest.json")
 

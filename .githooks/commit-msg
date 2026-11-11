@@ -1,0 +1,4 @@
+#!/bin/sh
+# Enabled by `make hooks`. The check itself is the shared one vendored from the
+# contracts repository into vendor/quality/.
+exec sh "$(git rev-parse --show-toplevel)/vendor/quality/githooks/commit-msg" "$@"
