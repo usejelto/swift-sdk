@@ -93,6 +93,7 @@ def download(url):
     for attempt in range(ATTEMPTS):
         try:
             request = urllib.request.Request(url, headers={'User-Agent': 'jelto-install-tools'})
+            # nosemgrep: dynamic-urllib-use-detected -- an HTTPS URL pinned in tools.json, checked by load_manifest
             with urllib.request.urlopen(request, timeout=120) as response:
                 data = response.read(MAX_DOWNLOAD + 1)
             if len(data) > MAX_DOWNLOAD:
@@ -100,7 +101,7 @@ def download(url):
             return data
         except (OSError, ValueError) as error:
             last = error
-            time.sleep(2 ** attempt)
+            time.sleep(2**attempt)
     raise ToolError(f'{url}: download failed: {last}')
 
 
@@ -110,8 +111,7 @@ def extract_binary(data, binary, url):
     if not url.endswith(('.tar.gz', '.tgz')):
         return data
     with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as archive:
-        members = [m for m in archive.getmembers()
-                   if m.isreg() and Path(m.name).name == binary]
+        members = [m for m in archive.getmembers() if m.isreg() and Path(m.name).name == binary]
         if len(members) != 1:
             raise ToolError(f'{url}: expected one file named {binary}, found {len(members)}')
         return archive.extractfile(members[0]).read()
@@ -156,8 +156,10 @@ def install(name, tools):
         if 'assets' in tool:
             asset = tool['assets'].get(target)
             if not asset:
-                raise ToolError(f'{name} {tool["version"]} has no pinned asset for {target}; '
-                                f'pinned: {", ".join(sorted(tool["assets"]))}')
+                raise ToolError(
+                    f'{name} {tool["version"]} has no pinned asset for {target}; '
+                    f'pinned: {", ".join(sorted(tool["assets"]))}'
+                )
             data = download(asset['url'])
             digest = hashlib.sha256(data).hexdigest()
             if digest != asset['sha256']:
@@ -168,18 +170,21 @@ def install(name, tools):
         elif 'go' in tool:
             env = {k: v for k, v in os.environ.items() if k not in {'GOFLAGS', 'GOWORK'}}
             env.update(GOBIN=str(staging), GOWORK='off', GOFLAGS='-mod=mod')
-            subprocess.run(['go', 'install', f'{tool["go"]}@{tool["version"]}'],
-                           check=True, env=env, cwd=staging)
+            subprocess.run(['go', 'install', f'{tool["go"]}@{tool["version"]}'], check=True, env=env, cwd=staging)
             if not (staging / tool['binary']).is_file():
                 raise ToolError(f'go install {tool["go"]} produced no {tool["binary"]}')
         else:
             commit = tool['version']
             git = ['git', '-C', str(staging), '-c', 'advice.detachedHead=false']
             subprocess.run(['git', 'init', '--quiet', str(staging)], check=True)
+            # nosemgrep: dangerous-subprocess-use-audit -- git with an argument list and the commit tools.json pins, never a shell
             subprocess.run([*git, 'fetch', '--quiet', '--depth', '1', tool['git'], commit], check=True)
+            # nosemgrep: dangerous-subprocess-use-audit -- git with an argument list and the commit tools.json pins, never a shell
             subprocess.run([*git, 'checkout', '--quiet', 'FETCH_HEAD'], check=True)
-            head = subprocess.run([*git, 'rev-parse', 'HEAD'], check=True,
-                                  capture_output=True, text=True).stdout.strip()
+            # nosemgrep: dangerous-subprocess-use-audit -- git with an argument list and the commit tools.json pins, never a shell
+            head = subprocess.run(
+                [*git, 'rev-parse', 'HEAD'], check=True, capture_output=True, text=True
+            ).stdout.strip()
             if head != commit:
                 raise ToolError(f'{tool["git"]}: fetched {head}, pinned {commit}')
             shutil.rmtree(staging / '.git')
@@ -211,6 +216,7 @@ def main(argv):
             path = install(rest[0], tools)
             if 'git' in tools[rest[0]]:
                 raise ToolError(f'{rest[0]} is a directory of data, not a program')
+            # nosemgrep: dangerous-os-exec-audit -- execs the pinned binary it just verified by SHA-256
             os.execv(str(path), [str(path), *rest[1:]])
     except ToolError as error:
         print(f'install_tools: {error}', file=sys.stderr)

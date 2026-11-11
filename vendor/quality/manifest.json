@@ -1,8 +1,8 @@
 {
   "name": "swift-quality-tools",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "producer": "contracts",
-  "producer_commit": "cf072f4e5b89df80efea3ede535f95dfad5122db",
+  "producer_commit": "27995499ab9e4d3af00a2c49050d56518796080c",
   "files": {
     "githooks/commit-msg": {
       "source": "tools/quality/githooks/commit-msg",
@@ -14,11 +14,11 @@
     },
     "install_tools.py": {
       "source": "tools/quality/install_tools.py",
-      "sha256": "c0be64725fc6e7e4fb05e16f4d5c054ca506d54ec610eb6b95e1c79fec8ae4a4"
+      "sha256": "70ac0d2ff86e71dd640b474812220bdc95b48af338c39d7341c132d68f3f8229"
     },
     "lint_baseline.py": {
       "source": "tools/quality/lint_baseline.py",
-      "sha256": "255a7ef6c6d9c95cf78c8c264c5bd9d7b033dc251ec8011f696d0889af5f419d"
+      "sha256": "1e6ca233c5a9dca1ad443a455b921788d80e177e948aa26fb1f28ab5a350382d"
     },
     "quality.mk": {
       "source": "tools/quality/quality.mk",
@@ -26,7 +26,7 @@
     },
     "tools.json": {
       "source": "tools/quality/tools.json",
-      "sha256": "d810823994e03903f3ef7cd61ed084d06f31ee9dfd9b3ce8496ff4b7c9694dbb"
+      "sha256": "a37d5500e66d51a1a92f3d4dcd2d22c5ac3b98ffda88d084a35cc38738e78e7b"
     },
     "zizmor.yml": {
       "source": "tools/quality/zizmor.yml",
