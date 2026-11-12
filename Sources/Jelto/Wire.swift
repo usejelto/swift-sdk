@@ -79,7 +79,7 @@ enum Grammar {
             prefixCount += 1
             i += 1
         }
-        guard prefixCount >= 1, i < scalars.count, scalars[i].value == 0x2F /* / */ else {
+        guard prefixCount >= 1, i < scalars.count, scalars[i].value == 0x2F else { // 0x2F is "/"
             return false
         }
         i += 1
@@ -135,12 +135,12 @@ enum Grammar {
         guard n > 0 else { return false }
 
         var i = 0
-        if scalars[i].value == 0x2D /* - */ {
+        if scalars[i].value == 0x2D { // 0x2D is "-"
             i += 1
         }
         guard i < n else { return false }
 
-        if scalars[i].value == 0x30 /* 0 */ {
+        if scalars[i].value == 0x30 { // 0x30 is "0"
             i += 1
         } else if isDigit19(scalars[i].value) {
             i += 1
@@ -149,15 +149,15 @@ enum Grammar {
             return false
         }
 
-        if i < n, scalars[i].value == 0x2E /* . */ {
+        if i < n, scalars[i].value == 0x2E { // 0x2E is "."
             i += 1
             guard i < n, isDigit(scalars[i].value) else { return false }
             while i < n, isDigit(scalars[i].value) { i += 1 }
         }
 
-        if i < n, scalars[i].value == 0x65 /* e */ || scalars[i].value == 0x45 /* E */ {
+        if i < n, scalars[i].value == 0x65 || scalars[i].value == 0x45 { // 0x65 is "e", 0x45 is "E"
             i += 1
-            if i < n, scalars[i].value == 0x2B /* + */ || scalars[i].value == 0x2D /* - */ {
+            if i < n, scalars[i].value == 0x2B || scalars[i].value == 0x2D { // 0x2B is "+", 0x2D is "-"
                 i += 1
             }
             guard i < n, isDigit(scalars[i].value) else { return false }

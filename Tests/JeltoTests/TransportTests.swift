@@ -116,8 +116,16 @@ final class TransportTests: XCTestCase {
         private let lock = NSLock()
         private var _state: URLSessionTask.State?
         var state: URLSessionTask.State? {
-            get { lock.lock(); defer { lock.unlock() }; return _state }
-            set { lock.lock(); _state = newValue; lock.unlock() }
+            get {
+                lock.lock()
+                defer { lock.unlock() }
+                return _state
+            }
+            set {
+                lock.lock()
+                _state = newValue
+                lock.unlock()
+            }
         }
     }
 

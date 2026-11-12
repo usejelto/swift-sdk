@@ -60,10 +60,7 @@ check: lint test build package security
 # so its choices are explained here. Layout settings match the existing code:
 # four-space indentation, lines up to 200 columns, up to two blank lines
 # between declarations, one space before an end-of-line comment, and #if
-# bodies not indented. Two default rules are off because the code uses those
-# forms on purpose: DoNotUseSemicolons (short statements share a line in case
-# tables and one-line accessors) and NoBlockComments (inline /* x */ names
-# beside hexadecimal scalar values). NeverForceUnwrap, NeverUseForceTry and
+# bodies not indented. NeverForceUnwrap, NeverUseForceTry and
 # NeverUseImplicitlyUnwrappedOptionals are on; swift-format itself exempts
 # files that import XCTest, so they apply to Sources only.
 lint:

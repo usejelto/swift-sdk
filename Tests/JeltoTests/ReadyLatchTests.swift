@@ -10,8 +10,16 @@ private final class Cell<Value: Sendable>: @unchecked Sendable {
     private var stored: Value
     init(_ value: Value) { stored = value }
     var value: Value {
-        get { lock.lock(); defer { lock.unlock() }; return stored }
-        set { lock.lock(); stored = newValue; lock.unlock() }
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return stored
+        }
+        set {
+            lock.lock()
+            stored = newValue
+            lock.unlock()
+        }
     }
 }
 

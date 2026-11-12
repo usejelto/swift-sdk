@@ -232,14 +232,30 @@ func scanProps(_ text: String) -> [String: WireValue]? {
                 guard i + 1 < n else { return nil }
                 let escape = bytes[i + 1]
                 switch escape {
-                case byteQuote: result.append(byteQuote); i += 2
-                case byteBackslash: result.append(byteBackslash); i += 2
-                case UInt8(ascii: "/"): result.append(UInt8(ascii: "/")); i += 2
-                case UInt8(ascii: "b"): result.append(0x08); i += 2
-                case UInt8(ascii: "f"): result.append(0x0C); i += 2
-                case UInt8(ascii: "n"): result.append(0x0A); i += 2
-                case UInt8(ascii: "r"): result.append(0x0D); i += 2
-                case UInt8(ascii: "t"): result.append(0x09); i += 2
+                case byteQuote:
+                    result.append(byteQuote)
+                    i += 2
+                case byteBackslash:
+                    result.append(byteBackslash)
+                    i += 2
+                case UInt8(ascii: "/"):
+                    result.append(UInt8(ascii: "/"))
+                    i += 2
+                case UInt8(ascii: "b"):
+                    result.append(0x08)
+                    i += 2
+                case UInt8(ascii: "f"):
+                    result.append(0x0C)
+                    i += 2
+                case UInt8(ascii: "n"):
+                    result.append(0x0A)
+                    i += 2
+                case UInt8(ascii: "r"):
+                    result.append(0x0D)
+                    i += 2
+                case UInt8(ascii: "t"):
+                    result.append(0x09)
+                    i += 2
                 case UInt8(ascii: "u"):
                     i += 2
                     guard let unit1 = hex4() else { return nil }

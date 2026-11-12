@@ -21,10 +21,16 @@ final class EndpointTests: XCTestCase {
         private let lock = NSLock()
         private var _count = 0
         func post(_ body: Data) -> Outcome {
-            lock.lock(); _count += 1; lock.unlock()
+            lock.lock()
+            _count += 1
+            lock.unlock()
             return Outcome(status: 202, body: Data("{}".utf8), retryAfter: nil, isNetworkError: false, isRetryable: false)
         }
-        var count: Int { lock.lock(); defer { lock.unlock() }; return _count }
+        var count: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return _count
+        }
     }
 
     /// The row that fails if the default is removed.
@@ -103,7 +109,10 @@ final class EndpointTests: XCTestCase {
             setenv("JELTO_STATE_DIR", dir.path, 1)
             setenv("JELTO_NOW", "0", 1)
             unsetenv("JELTO_ENDPOINT")
-            defer { unsetenv("JELTO_STATE_DIR"); unsetenv("JELTO_NOW") }
+            defer {
+                unsetenv("JELTO_STATE_DIR")
+                unsetenv("JELTO_NOW")
+            }
 
             let posts = RecordedPosts()
             let engine = Engine(post: posts.post)
@@ -123,7 +132,11 @@ final class EndpointTests: XCTestCase {
         setenv("JELTO_STATE_DIR", dir.path, 1)
         setenv("JELTO_NOW", "0", 1)
         setenv("JELTO_ENDPOINT", "http://127.0.0.1:1/v1/e", 1)
-        defer { unsetenv("JELTO_STATE_DIR"); unsetenv("JELTO_NOW"); unsetenv("JELTO_ENDPOINT") }
+        defer {
+            unsetenv("JELTO_STATE_DIR")
+            unsetenv("JELTO_NOW")
+            unsetenv("JELTO_ENDPOINT")
+        }
 
         let engine = Engine(post: RecordedPosts().post)
         engine.initialize(key: "prd_conform001", app: nil, endpoint: "")
@@ -140,7 +153,10 @@ final class EndpointTests: XCTestCase {
         setenv("JELTO_STATE_DIR", dir.path, 1)
         setenv("JELTO_NOW", "0", 1)
         unsetenv("JELTO_ENDPOINT")
-        defer { unsetenv("JELTO_STATE_DIR"); unsetenv("JELTO_NOW") }
+        defer {
+            unsetenv("JELTO_STATE_DIR")
+            unsetenv("JELTO_NOW")
+        }
 
         let engine = Engine(post: RecordedPosts().post)
         engine.initialize(key: "prd_conform001", app: nil, endpoint: "http://first.example/v1/e")
